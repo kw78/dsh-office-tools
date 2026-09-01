@@ -59,7 +59,7 @@ maintainer reference only.
   "kind": "extension",
   "tags": ["office", "word", "excel", "powerpoint", "tools"],
   "author": { "name": "kw78", "url": "https://github.com/kw78" },
-  "version": "0.1.0",
+  "version": "0.6.0",
   "license": "MIT",
   "source": {
     "repository": "https://github.com/kw78/dsh-office-tools",
@@ -74,7 +74,9 @@ maintainer reference only.
       "vulnerabilityScan": "unknown",
       "permissions": "workspace-fs",
       "nativeCode": "none",
-      "installScripts": "build-only"
+      "installScripts": "build-only",
+      "provenance": "npm --provenance via GitHub Actions OIDC (publish.yml)",
+      "ciMatrix": "node 20/22"
     }
   },
   "listing": {
@@ -98,6 +100,7 @@ maintainer reference only.
 
 Maintainer steps:
 
-1. Verify the package's `dsh.bundle.patch` manifest and `pnpm run check` result.
-2. Create the catalog entry in Atlas and regenerate the signed registry.
-3. Pin the generated file with `npm run registry:vendor -- <file>` and open a PR.
+1. Publish the release first: push the tag, then create the GitHub Release — `publish.yml` runs `pnpm run check` and publishes to npm with provenance. The registry entry below should reference the npm version, not the git ref.
+2. Verify the package's `dsh.bundle.patch` manifest and the green `publish.yml` run.
+3. Create the catalog entry in Atlas and regenerate the signed registry.
+4. Pin the generated file with `npm run registry:vendor -- <file>` and open a PR.

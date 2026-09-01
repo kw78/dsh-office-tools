@@ -19,6 +19,18 @@
 
 以 `=` 开头的字符串单元格会写成真正的 Excel 公式（Excel 打开时计算）。
 
+## 演示
+
+一句话，季度报告三件套 —— 带指标表的 Word、带 `=SUM`/差异公式的 Excel、带演讲者备注的 PowerPoint：
+
+<img src="docs/demo/session.svg" alt="一句话生成 report.docx、budget.xlsx、deck.pptx" width="780">
+
+上图会话用的提示词：
+
+> 生成 Q3 季度报告三件套：`report.docx`（标题、两段摘要、三个要点、一张指标表）、`budget.xlsx`（Budget sheet 含 `=SUM` 合计与计划/实际差异公式，再加一个 Summary sheet）、`deck.pptx`（标题页 + 3 页正文，含演讲者备注）。
+
+模型会把它拆成 `word_create` → `excel_create` → `ppt_create`（回读走 `word_read` / `excel_read` / `ppt_read`；新写入的公式在被 Excel 计算缓存前以 `'=…'` 串回读）。整个流程由 `tests/demo-trio.spec.ts` 钉死，演示不会与工具行为漂移；图中的体积数字来自该测试场景的一次真实运行。
+
 ## 框架接入方式
 
 插件遵循 DSH 标准 host 插件契约：
@@ -52,7 +64,7 @@ dsh plugin --profile web add github:kw78/dsh-office-tools
 dsh plugin --profile web add /path/to/dsh-office-tools
 ```
 
-安装后重启 DSH 服务。模型下一次组装提示词时即可看到 7 个工具。
+安装后重启 DSH 服务。模型下一次组装提示词时即可看到 8 个工具。
 
 ## 配置
 

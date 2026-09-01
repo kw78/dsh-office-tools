@@ -1,0 +1,47 @@
+name: publish
+
+# npm release pipeline (0.6.0): publishing is triggered by publishing a
+# GitHub Release, runs the full check suite, and publishes with OIDC
+# provenance. One-time setup documented in docs/DEVELOPMENT.md §10.2:
+#   - repo secret NPM_TOKEN (granular, publish-only for this package)
+#   - provenance enabled for the package on the npm side
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse non-version tags
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            v*) ;;
+            *) echo "release tag ${GITHUB_REF_NAME} is not v-prefixed" >&2; exit 1 ;;
+          esac
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: Enforce tag ↔ package version match
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "v${PKG_VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "release tag ${GITHUB_REF_NAME} does not match package.json version ${PKG_VERSION}" >&2
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -115,9 +115,15 @@ DSH 是 Cordis 插件内核：
 | `excel_read` | `max_rows` 默认 5 000/上限 10 000（每 sheet）；全 workbook 累计 200 000 格 | 每 sheet 各自标记 |
 | 通用 | 读文件 ≤50 MiB（压缩后）；zip 声明预算 256 MiB/条目、512 MiB/整包、100 000 条目 | 超限直接拒绝（非截断） |
 
+### 4.11 peer 依赖范围与发布工程（0.6.0）
+
+- `@deepseek-ai/dsh-*` 的 peer 范围是 `^0.1.0-rc.6 || ^0.1.1-rc.0`。单写 `^0.1.0-rc.6` 时 node-semver 实测**不满足**运行时 0.1.1-rc.2（semver 规定预发布版本只能满足与其 [major.minor.patch] 元组相同的比较器），声明与宿主脱节；并集恰好覆盖 npm 上全部 0.1.x 稳定版与 rc、排除 0.1.2-alpha/0.2.0。0.1.2-rc 出现时按同法追加 `|| ^0.1.2-rc.0`；0.2.0 属破坏性变更，需另行评估。`cordis` 维持 `^4.0.1`（覆盖运行时 4.0.2）。
+- devDependencies 经该范围解析到 0.1.1-rc.2，与 DSH 运行时同版本；`pnpm peers check` 对传递性 dsh peer（dsh-invariants 等）的 warning 是开发环境噪音——运行时由 DSH 完整提供同线版本，测试/typecheck 全绿即验证。
+- 发布自动化：`.github/workflows/publish.yml` 由 GitHub Release（`published`）触发，先完整 `pnpm run check`，再 `npm publish --provenance`（OIDC `id-token: write`）；tag 非 `v*` 或与 `package.json` 版本不一致直接拒绝。CI（`ci.yml`）为 node 20/22 矩阵，对齐 `engines >= 20`。
+
 ## 5. 测试
 
-`tests/tools.spec.ts`（14 例）+ `tests/zip-guard.spec.ts`（7 例，0.3.0）+ `tests/word-parity.spec.ts`（3 例，0.3.0）+ `tests/excel-formula.spec.ts`（7 例，0.4.0 写入 + 0.5.0 回读）+ `tests/word-update.spec.ts`（5 例，0.4.0）+ `tests/word-markdown.spec.ts`（3 例，0.5.0）+ `tests/ppt-read.spec.ts`（4 例，0.5.0），共享挂载器 `tests/harness.ts`：
+`tests/tools.spec.ts`（14 例）+ `tests/zip-guard.spec.ts`（7 例，0.3.0）+ `tests/word-parity.spec.ts`（3 例，0.3.0）+ `tests/excel-formula.spec.ts`（7 例，0.4.0 写入 + 0.5.0 回读）+ `tests/word-update.spec.ts`（5 例，0.4.0）+ `tests/word-markdown.spec.ts`（6 例，0.5.0）+ `tests/ppt-read.spec.ts`（4 例，0.5.0）+ `tests/demo-trio.spec.ts`（1 例，0.6.0），合计 47 例（CI 口径），共享挂载器 `tests/harness.ts`：
 
 - 8 个工具恰好注册一次；
 - 所有 schema 通过 `assertSupportedJsonSchema`；
@@ -132,20 +138,21 @@ DSH 是 Cordis 插件内核：
 - word_update：追加段落/项目符号/表格后 `word_read` 全文逐字节校验、插入位置在 sectPr 之前且保留原包其它部件、XML 特殊字符转义、no-op/伪 zip/超上限拒绝、无 sectPr 文档兜底；
 - Excel 公式：create/update 单元格/整表替换三条路径的产物含 `<f>`，普通字符串不误转；回读四态（无缓存→`=…`、有缓存→值、纯公式行保留、标量格式化与旧行为逐格一致）；
 - word markdown：标题/嵌套 bullet/含 `|` 表格的精确输出、word_create fixture 的 markdown 全文、默认 format 与 golden 常量逐字节回归；
-- ppt_read：表格结构化返回且不泄漏进 paragraphs、表格超预算丢弃并置 truncated、图片 descr 解码与文档序、pptxgenjs deck 的 alt=源路径。
+- ppt_read：表格结构化返回且不泄漏进 paragraphs、表格超预算丢弃并置 truncated、图片 descr 解码与文档序、pptxgenjs deck 的 alt=源路径；
+- 三件套（0.6.0）：单会话 word_create + excel_create（公式）+ ppt_create（备注）生成 report.docx / budget.xlsx / deck.pptx，三件均 `PK` 签名，回读断言 markdown 标题与表格、`=SUM(B2:B4)` 公式串、页数与 notes——README Demo 的可执行形态。
 
 ## 6. 发布与生态状态
 
 | 项 | 状态 |
 |---|---|
 | GitHub | <https://github.com/kw78/dsh-office-tools> |
-| npm | `dsh-office-tools@0.1.0`（0.2.0 已就绪未发布；0.3.0 待发布） |
+| npm | `dsh-office-tools@0.2.0`；0.3.0–0.5.0 滞留 GitHub 未发 npm（手工发布缺口），0.6.0 起由 `publish.yml` 自动发布（Release 触发 + provenance），跨版本内容见 CHANGELOG |
 | topics | `dsh`, `dsh-plugin`, `deepseek-harness`, `office` 等 |
-| CI | GitHub Actions `pnpm run check`，全绿 |
-| tag | `v0.1.0` |
+| CI | GitHub Actions `pnpm run check`，node 20/22 矩阵（0.6.0），全绿 |
+| tag | `v0.1.0` ~ `v0.5.0` |
 | awesome-dsh-plugin | PR #405 已合并 |
 | dsh-market | 随 awesome 列表同步 |
-| dsh-hub / Atlas | 未收录，候选 entry 在 `docs/hub-registration.md` |
+| dsh-hub / Atlas | 未收录，候选 entry 在 `docs/hub-registration.md`（0.6.0 已刷新，提交动作待维护者） |
 
 ## 7. 安装方式
 
@@ -195,14 +202,23 @@ git commit -m "fix: ..."
 git push
 ```
 
-### 10.2 发布新版本
+### 10.2 发布新版本（0.6.0 起：Release 触发 + provenance）
+
+一次性前置（仅首次）：
+
+1. npm 侧：确认账号对 `dsh-office-tools` 允许 provenance；
+2. GitHub 仓库 Settings → Secrets：配置 `NPM_TOKEN`（granular、仅 publish 该包）。
+
+每次发版：
 
 ```bash
-npm version patch   # 或 minor/major
-pnpm run check
-git push --follow-tags
-npm publish --registry=https://registry.npmjs.org
+pnpm run check     # 必须全绿（版本号、CHANGELOG 已就位）
+git add -A && git commit -m "release: v0.x.y" && git push
+git tag vx.y.z && git push --follow-tags
+# 在 GitHub 上基于该 tag 创建并发布 Release → publish.yml 自动 check + npm publish --provenance
 ```
+
+工作流自带门禁：tag 非 `v*`、tag 与 `package.json` 版本不一致、或 check 失败都会拒绝发布；发布失败时删除 Release 修正后重发即可。0.3.0–0.5.0 未上 npm 的历史缺口自此闭合（首个经工作流发布的版本为 0.6.0）。
 
 ### 10.3 验证插件真实执行
 

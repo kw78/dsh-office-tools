@@ -1,6 +1,6 @@
 # dsh-office-tools 多版本路线图
 
-> 版本节奏与取舍的单一事实来源。v0.5.0（含 0.3.0/0.4.0）已实施；后续版本按需启动，逐流推进、独立提交、测试全绿才前进。
+> 版本节奏与取舍的单一事实来源。v0.6.0（含 0.3.0/0.4.0/0.5.0）已实施；后续版本按需启动，逐流推进、独立提交、测试全绿才前进。
 
 ---
 
@@ -58,16 +58,18 @@
 
 ---
 
-# v0.6.0「工程化与生态」规划
+# v0.6.0「工程化与生态」（已实施，2026-09-01）
 
-| 需求 | 说明 | 难度 |
-|---|---|---|
-| README 演示 GIF + 示例 prompt | "一句话生成季度报告三件套"演示，社区插件转化率关键 | 低 |
-| CI 矩阵 | node 20/22（engines 声称 ≥20 但只测 22） | 低 |
-| npm provenance + 发布工作流 | GitHub Actions OIDC 发布，`--provenance`，包页显示构建来源徽章，顺便把发版动作自动化 | 中 |
-| dsh-hub / Atlas 提交 | 材料早就在 `docs/hub-registration.md`，一直没交 | 低 |
-| peer 依赖实测刷新 | 本机 dsh 已 0.1.1-rc.2，验证 `@deepseek-ai/*` 的 `^0.1.0-rc.6` 范围语义后放宽/提升 | 低 |
-| 开关泛化（可选） | `enableWordTools` / `enableExcelTools`，与 `enablePptTools` 对称；仅当有用户提出同类共存需求再做 | 低 |
+规格与验收见 `docs/spec-0.6.0.md`。六项需求的落地结果：
+
+- **CI 矩阵** ✅：`ci.yml` node 20/22 矩阵（`fail-fast: false`），engines 下限开始被真实测试。
+- **npm provenance + 发布工作流** ✅：`publish.yml` 由 GitHub Release 触发，`id-token: write` + `npm publish --provenance`，带 tag↔version 一致性门禁与完整 check 前置；0.3.0–0.5.0 滞留 GitHub 未发 npm 的根因（手工发布）就此消除。首次运行需配 `NPM_TOKEN` secret 并在 npm 侧允许 provenance（DEVELOPMENT.md §10.2 清单）。
+- **peer 依赖实测刷新** ✅：node-semver 实测 `^0.1.0-rc.6` 不满足运行时 0.1.1-rc.2（预发布元组规则），四个 `dsh-*` 放宽为 `^0.1.0-rc.6 || ^0.1.1-rc.0`（恰好覆盖 npm 上全部 0.1.x 稳定版与 rc、排除 0.1.2-alpha/0.2.0）；cordis 维持 `^4.0.1`（覆盖运行时 4.0.2）。devDependencies 解析到 0.1.1-rc.2，55 测试全绿。
+- **README 演示 + 示例 prompt** ✅（有偏差）：双语 Demo 章节内嵌示例 prompt；演示图用 `docs/demo/session.svg`（终端风格、数字取自真实运行）而非录屏 GIF——模型无法代录终端，GIF 留作后续可选增强；`tests/demo-trio.spec.ts` 把「一句话三件套」钉进 CI，演示不与工具漂移。
+- **dsh-hub / Atlas 提交** ⏳（仓库内部分完成）：登记材料刷新到 0.6.0（含 provenance/ciMatrix 事实、先经 publish.yml 发 npm 的步骤）；实际提交仍需维护者在 Atlas/omdsh-dev 仓库操作。
+- **开关泛化** ❌（按原条件维持不做）：无用户提出 Word/Excel 同类共存需求，`enablePptTools` 保持唯一开关。
+
+发版卫生（2026-09-01 核对）：SheetJS CDN 仍以 0.20.3 为最新（0.20.5 tarball 404）；docx 9.7.1 / jszip 3.10.1 / pptxgenjs 4.0.1 均为 npm 最新，无需升级。
 
 # 远期候选（按需评估，不承诺）
 

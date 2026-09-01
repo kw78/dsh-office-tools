@@ -19,6 +19,18 @@ Eight model-facing Office file tools for DeepSeek Harness, running entirely in t
 
 String cells starting with `=` are written as real Excel formulas (Excel computes them on open).
 
+## Demo
+
+One prompt, a quarterly-report trio — Word with a metrics table, Excel with `=SUM`/variance formulas, PowerPoint with speaker notes:
+
+<img src="docs/demo/session.svg" alt="One prompt generating report.docx, budget.xlsx, and deck.pptx" width="780">
+
+The prompt behind that session:
+
+> Generate the Q3 quarterly-report trio: `report.docx` (title, two summary paragraphs, three highlights, a metrics table), `budget.xlsx` (a Budget sheet with `=SUM` totals and plan-vs-actual variance formulas, plus a Summary sheet), and `deck.pptx` (title slide + three content slides with speaker notes).
+
+The model turns it into `word_create` → `excel_create` → `ppt_create` (reads come back through `word_read` / `excel_read` / `ppt_read`; freshly written formulas read back as `'=…'` strings until Excel caches values). The whole flow is pinned by `tests/demo-trio.spec.ts`, so the demo cannot drift from the tools. The file sizes in the image come from a real run of that test scenario.
+
 ## Harness integration
 
 The plugin follows the standard DSH host-plugin contract:

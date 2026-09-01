@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-09-01
+
+Engineering-and-ecosystem release (spec: `docs/spec-0.6.0.md`). No tool behavior changes.
+
+### Added
+
+- npm publish workflow with provenance (`.github/workflows/publish.yml`): publishing a GitHub Release triggers a full `pnpm run check` and then `npm publish --provenance` under OIDC (`id-token: write`). A guard refuses non-`v*` tags and any tag that does not match `package.json`'s version. One-time setup (repo `NPM_TOKEN` secret, npm-side provenance) is documented in `docs/DEVELOPMENT.md` §10.2. Releases 0.3.0–0.5.0 never reached npm (registry still at 0.2.0) because publishing was manual; this closes that gap.
+- CI matrix: `ci.yml` now tests node 20 and 22 (`fail-fast: false`) — `engines` claims `>=20` but only 22 was tested.
+- README demo (both languages): the "one prompt, quarterly-report trio" example prompt with a terminal-style session image (`docs/demo/session.svg`, numbers from a real run), and `tests/demo-trio.spec.ts` — an in-repo, path-independent integration test that creates `report.docx` + `budget.xlsx` (formulas) + `deck.pptx` (notes) in one session and reads all three back, pinning the README claim. The tracked suite grows 46 → 47 tests (the maintainer's machine additionally runs an untracked local demo spec; 55 pass there).
+
+### Changed
+
+- Peer dependency ranges for `@deepseek-ai/dsh-agent/-llm/-session/-tools` widened from `^0.1.0-rc.6` to `^0.1.0-rc.6 || ^0.1.1-rc.0`. Verified empirically with node-semver: the old range does **not** satisfy the shipping DSH runtime `0.1.1-rc.2` (prerelease versions only satisfy comparators sharing their [major.minor.patch] tuple), so the declared peers excluded the host actually running the plugin. The union covers every 0.1.x stable and rc on npm (0.1.0-rc.6/7/8, 0.1.0, 0.1.1-rc.*, 0.1.1) and still excludes 0.1.2-alpha/0.2.0. `cordis` stays `^4.0.1` (already covers the runtime's 4.0.2). devDependencies resolve to 0.1.1-rc.2, so typecheck/tests now run against the same versions as the runtime — all 55 tests green against it.
+
+### Docs
+
+- `docs/hub-registration.md`: catalog entry bumped to 0.6.0 with `provenance` and `ciMatrix` risk facts; maintainer steps now start from the automated npm release.
+- README.zh: stale tool count (7 → 8) fixed.
+- ROADMAP marks 0.6.0 implemented, with deviations recorded (session image is an SVG rendered from real output, not a recorded GIF; the dsh-hub/Atlas submission itself remains an external maintainer action; per-family config switches stay deferred until users ask).
+
 ## [0.5.0] - 2026-08-31
 
 ### Added
