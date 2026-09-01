@@ -75,6 +75,7 @@ maintainer reference only.
       "permissions": "workspace-fs",
       "nativeCode": "none",
       "installScripts": "build-only",
+      "runtimeDependencies": "docx/jszip/pptxgenjs (npm) + xlsx (SheetJS CDN 0.20.3 tarball URL)",
       "provenance": "npm --provenance via GitHub Actions OIDC (publish.yml)",
       "ciMatrix": "node 20/22"
     }

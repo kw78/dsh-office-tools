@@ -82,12 +82,12 @@ DSH 是 Cordis 插件内核：
 
 ### 4.7 构建（`build.mjs`）
 
-- esbuild 把 Office 依赖与 `@deepseek-ai/schemastery` 内联进 `lib/index.js`（schemastery 用于 Loader 校验 `Config`，与 dsh-notification 同策略）；
-- `@deepseek-ai/dsh-*` 和 `cordis` 保持 external；
-- `xlsx` 固定来自 SheetJS 官方 CDN tarball（0.20.3），npm 上无修复版（见 0.2.0 变更与第 8 节）；
-- 使用 `createRequire(import.meta.url)` banner 解决 `xlsx` 的 CJS 动态 `require("fs"/"stream")` 在 ESM bundle 中崩溃的问题（0.3.0 起 mammoth 已移除，该 banner 只服务 xlsx）；
+- esbuild 只打包本插件自有代码与 `@deepseek-ai/schemastery`（schemastery 用于 Loader 校验 `Config`，与 dsh-notification 同策略），产物 `lib/index.js` 90.6 kB；
+- Office 库（`docx`/`jszip`/`pptxgenjs`/`xlsx`）与 `@deepseek-ai/dsh-*`、`cordis` 一样保持 external，运行时从 profile 的 node_modules 解析——它们是普通 `dependencies`（0.6.0，见 4.12）；
+- `xlsx` 固定来自 SheetJS 官方 CDN tarball（0.20.3 URL 依赖），npm 上无修复版（见 0.2.0 变更与第 8 节）；
+- 0.3.0 为内联 xlsx 引入的 `createRequire` banner 已随内联移除一并删除（external 化后 CJS 依赖由 Node 原生处理）；
 - tsc 只发 `lib/types` 声明；
-- npm 包 `files` 只装 `lib/*.js` + `lib/types`，`lib/index.js.map` 留在 git 用于构建调试（2.0 MB → 550 kB packed）。
+- npm 包 `files` 只装 `lib/*.js` + `lib/types`，`lib/index.js.map` 留在 git 用于构建调试（packed 550 kB → 31.8 kB）。
 
 ### 4.8 类型缺口
 
@@ -121,6 +121,14 @@ DSH 是 Cordis 插件内核：
 - devDependencies 经该范围解析到 0.1.1-rc.2，与 DSH 运行时同版本；`pnpm peers check` 对传递性 dsh peer（dsh-invariants 等）的 warning 是开发环境噪音——运行时由 DSH 完整提供同线版本，测试/typecheck 全绿即验证。
 - 发布自动化：`.github/workflows/publish.yml` 由 GitHub Release（`published`）触发，先完整 `pnpm run check`，再 `npm publish --provenance`（OIDC `id-token: write`）；tag 非 `v*` 或与 `package.json` 版本不一致直接拒绝。CI（`ci.yml`）为 node 20/22 矩阵，对齐 `engines >= 20`。
 
+### 4.12 Office 库去内联化与第三方商店字节上限（0.6.0）
+
+- 背景：DSH Store（AI-Scarlett/DSH-Store，issue #334）的固定 Commit 自动审查对仓库提交的运行时文件设硬上限——单文件 ≤262,144 B（256 KiB）、总量 ≤2,097,152 B（2 MiB）；超限即"更新暂缓"。
+- 实测排除了"保持内联"的一切变体：未压缩 `lib/index.js` 2,479,019 B；开 minify 后 1,319,961 B（总量可过 2 MiB，单文件仍超 5 倍）；xlsx 单模块压缩后仍 >256 KiB，而任何打包器都无法把一个模块拆进多个文件——**内联架构与单文件上限数学上不相容**。
+- 方案：docx/jszip/pptxgenjs 移回 npm `dependencies`、xlsx 钉 CDN tarball URL，`lib/index.js` 只含自有代码（2,479,019 → 90,592 B；packed 550 kB → 31.8 kB）。这回到 0.1.0 的安装模型，推翻 0.2.0 的"tarball 零依赖自包含"性质：安装需联网拉 ~15–20 MB 依赖（含 cdn.sheetjs.com）。低风险依据：测试套件从来就是按非内联解析跑的（vitest 直接走 node_modules，bundle 只是发布产物），且 `lib/index.js` 纯 Node ESM 导入冒烟通过。
+- jszip 范围维持 `^3.10.1`：zip 守卫读其私有 `_data.uncompressedSize`，未来版本若移除该字段，守卫按条目静默跳过（降级为 50 MiB 压缩上限兜底）而非崩溃，升级时按 ROADMAP 复核即可。
+- 附带收益：`lib/index.js` 不再包含第三方库内部代码，Mimosa 类提交扫描对构建产物的误报面大幅缩小。
+
 ## 5. 测试
 
 `tests/tools.spec.ts`（14 例）+ `tests/zip-guard.spec.ts`（7 例，0.3.0）+ `tests/word-parity.spec.ts`（3 例，0.3.0）+ `tests/excel-formula.spec.ts`（7 例，0.4.0 写入 + 0.5.0 回读）+ `tests/word-update.spec.ts`（5 例，0.4.0）+ `tests/word-markdown.spec.ts`（6 例，0.5.0）+ `tests/ppt-read.spec.ts`（4 例，0.5.0）+ `tests/demo-trio.spec.ts`（1 例，0.6.0），合计 47 例（CI 口径），共享挂载器 `tests/harness.ts`：
@@ -153,6 +161,7 @@ DSH 是 Cordis 插件内核：
 | awesome-dsh-plugin | PR #405 已合并 |
 | dsh-market | 随 awesome 列表同步 |
 | dsh-hub / Atlas | 未收录，候选 entry 在 `docs/hub-registration.md`（0.6.0 已刷新，提交动作待维护者） |
+| DSH Store (AI-Scarlett) | 自动收录于 0.1.0；0.5.0 更新因运行时字节上限暂缓（#334）；0.6.0 去内联化后达标（单文件 90.6 kB / 总量 101.6 kB），推送后等其 8 小时周期自动复检 |
 
 ## 7. 安装方式
 

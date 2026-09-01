@@ -7,6 +7,19 @@ settings:
 importers:
 
   .:
+    dependencies:
+      docx:
+        specifier: ^9.5.1
+        version: 9.7.1
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
+      pptxgenjs:
+        specifier: ^4.0.1
+        version: 4.0.1
+      xlsx:
+        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
@@ -29,27 +42,15 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
-      docx:
-        specifier: ^9.5.1
-        version: 9.7.1
       esbuild:
         specifier: ^0.25.0
         version: 0.25.0
-      jszip:
-        specifier: ^3.10.1
-        version: 3.10.1
-      pptxgenjs:
-        specifier: ^4.0.1
-        version: 4.0.1
       typescript:
         specifier: ^5.6.0
         version: 5.6.2
       vitest:
         specifier: ^4.1.8
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.25.0))
-      xlsx:
-        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
-        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
 
 packages:
 

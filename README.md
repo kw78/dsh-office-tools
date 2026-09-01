@@ -49,7 +49,7 @@ pnpm install
 pnpm run check   # typecheck + tests + build
 ```
 
-Artifacts: `lib/index.js` (ESM host bundle with Office libraries inlined; `@deepseek-ai/*` and `cordis` stay external) and `lib/types/**/*.d.ts`.
+Artifacts: `lib/index.js` (ESM host bundle of this plugin's own code plus schemastery — 90 kB; the Office libraries are regular runtime `dependencies` resolved from the profile's node_modules) and `lib/types/**/*.d.ts`. `@deepseek-ai/*` and `cordis` stay external.
 
 ## Install
 
@@ -64,7 +64,7 @@ dsh plugin --profile web add github:kw78/dsh-office-tools
 dsh plugin --profile web add /path/to/dsh-office-tools
 ```
 
-Restart the DSH server after installation. The eight tools appear in the next prompt assembly.
+Restart the DSH server after installation. The eight tools appear in the next prompt assembly. Note: since 0.6.0 the Office libraries are runtime `dependencies`, so installation fetches them (npm, plus cdn.sheetjs.com for SheetJS — ~15–20 MB); the plugin package itself is ~32 kB.
 
 ## Configuration
 
@@ -96,5 +96,5 @@ The plugin declares a schemastery `Config` the Loader validates at load time. On
 - Text/cell results are bounded and mark `truncated`.
 - Creates/updates are bounded by row and cell limits and refuse overwrites by default.
 - No LibreOffice/PowerPoint/Word subprocess is spawned; formats are generated and parsed with pure-JS libraries.
-- SheetJS is pinned to the 0.20.3 tarball from the official CDN (<https://cdn.sheetjs.com>): npm stopped at 0.18.5, which carries CVE-2023-30533 (prototype pollution) and CVE-2024-22363 (ReDoS). The library is inlined into `lib/index.js` at build time and never resolved at runtime, so installs of the published plugin do not touch the CDN.
+- SheetJS is pinned to the 0.20.3 tarball from the official CDN (<https://cdn.sheetjs.com>): npm stopped at 0.18.5, which carries CVE-2023-30533 (prototype pollution) and CVE-2024-22363 (ReDoS); fixed releases are only distributed through the official CDN. Since 0.6.0 it is a URL-pinned runtime dependency — installs download exactly this tarball from the CDN, never the vulnerable npm release.
 - Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md).

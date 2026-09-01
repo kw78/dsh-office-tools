@@ -49,7 +49,7 @@ pnpm install
 pnpm run check   # typecheck + tests + build
 ```
 
-构建产物：`lib/index.js`（host ESM，Office 依赖内联，`@deepseek-ai/*`/`cordis` 保持 external）与 `lib/types/**/*.d.ts`。
+构建产物：`lib/index.js`（ESM host bundle，仅打包本插件自有代码 + schemastery，90 kB；Office 库是常规运行时 `dependencies`，由 profile 的 node_modules 解析）与 `lib/types/**/*.d.ts`；`@deepseek-ai/*` 和 `cordis` 保持 external。
 
 ## 安装
 
@@ -64,7 +64,7 @@ dsh plugin --profile web add github:kw78/dsh-office-tools
 dsh plugin --profile web add /path/to/dsh-office-tools
 ```
 
-安装后重启 DSH 服务。模型下一次组装提示词时即可看到 8 个工具。
+安装后重启 DSH 服务。模型下一次组装提示词时即可看到 8 个工具。注意：0.6.0 起 Office 库是运行时 `dependencies`，安装时会联网拉取（npm + SheetJS 的 cdn.sheetjs.com，约 15–20 MB）；插件包本身仅 ~32 kB。
 
 ## 配置
 
@@ -96,5 +96,5 @@ dsh plugin --profile web add /path/to/dsh-office-tools
 - 文本/单元格结果有上限并标记 `truncated`。
 - 创建/更新有行数、单元格数上限，且默认不覆盖已有文件。
 - 不调用 LibreOffice / PowerPoint / Word 等外部进程，所有格式均通过纯 JS 库生成/解析。
-- SheetJS 固定为官方 CDN（<https://cdn.sheetjs.com>）的 0.20.3 tarball：npm 停留在 0.18.5，该版本携带 CVE-2023-30533（原型污染）与 CVE-2024-22363（ReDoS）。该库在构建时内联进 `lib/index.js`、运行时从不解析，因此安装已发布的插件不需要访问 CDN。
+- SheetJS 固定为官方 CDN（<https://cdn.sheetjs.com>）的 0.20.3 tarball：npm 停留在 0.18.5，该版本携带 CVE-2023-30533（原型污染）与 CVE-2024-22363（ReDoS），修复版只经官方 CDN 分发。0.6.0 起它是 URL 钉死的运行时依赖——安装时从 CDN 下载且仅下载该 tarball，绝不触碰带漏洞的 npm 版本。
 - 版本路线见 [docs/ROADMAP.md](docs/ROADMAP.md)。

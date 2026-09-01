@@ -57,6 +57,12 @@
       "optional": true
     }
   },
+  "dependencies": {
+    "docx": "^9.5.1",
+    "jszip": "^3.10.1",
+    "pptxgenjs": "^4.0.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": "^0.1.0-rc.6 || ^0.1.1-rc.0",
@@ -65,13 +71,9 @@
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6 || ^0.1.1-rc.0",
     "@deepseek-ai/schemastery": "^3.18.2",
     "@types/node": "^24.0.0",
-    "docx": "^9.5.1",
     "esbuild": "^0.25.0",
-    "jszip": "^3.10.1",
-    "pptxgenjs": "^4.0.1",
     "typescript": "^5.6.0",
-    "vitest": "^4.1.8",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "vitest": "^4.1.8"
   },
   "author": "kw78",
   "homepage": "https://github.com/kw78/dsh-office-tools#readme",

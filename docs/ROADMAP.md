@@ -68,6 +68,7 @@
 - **README 演示 + 示例 prompt** ✅（有偏差）：双语 Demo 章节内嵌示例 prompt；演示图用 `docs/demo/session.svg`（终端风格、数字取自真实运行）而非录屏 GIF——模型无法代录终端，GIF 留作后续可选增强；`tests/demo-trio.spec.ts` 把「一句话三件套」钉进 CI，演示不与工具漂移。
 - **dsh-hub / Atlas 提交** ⏳（仓库内部分完成）：登记材料刷新到 0.6.0（含 provenance/ciMatrix 事实、先经 publish.yml 发 npm 的步骤）；实际提交仍需维护者在 Atlas/omdsh-dev 仓库操作。
 - **开关泛化** ❌（按原条件维持不做）：无用户提出 Word/Excel 同类共存需求，`enablePptTools` 保持唯一开关。
+- **DSH Store 字节上限** ✅（0.6.0 追加，发版前落地）：AI-Scarlett/DSH-Store #334 对提交的运行时文件设单文件 ≤256 KiB / 总量 ≤2 MiB，与 0.2.0 的全内联架构数学上不相容（xlsx 单模块压缩后仍超 256 KiB，minify 实测全 bundle 1.32 MB）；四个 Office 库移回运行时 `dependencies`，`lib/index.js` 2,479,019 → 90,592 B、npm 包 550 kB → 31.8 kB，回到 0.1.0 安装模型（详见 DEVELOPMENT.md 4.12）。推送后等商店 8 小时周期自动复检。
 
 发版卫生（2026-09-01 核对）：SheetJS CDN 仍以 0.20.3 为最新（0.20.5 tarball 404）；docx 9.7.1 / jszip 3.10.1 / pptxgenjs 4.0.1 均为 npm 最新，无需升级。
 

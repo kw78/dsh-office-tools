@@ -14,6 +14,7 @@ ROADMAP 为 v0.6.0 列了六项需求。逐项核实当前状态:
 | R4 | dsh-hub / Atlas 提交 | 材料在 `docs/hub-registration.md`,版本停在 0.1.0,一直未提交 | 仓库内能做的是把材料刷新到 0.6.0 并补 provenance 事实;实际提交需维护者账号,属仓库外动作 |
 | R5 | peer 依赖实测刷新 | 本机 DSH 运行时 = `dsh 0.1.1-rc.2`(`@deepseek-ai/dsh-tools` 0.1.1-rc.2、cordis 4.0.2);插件声明 `^0.1.0-rc.6`。用 node-semver 实测:`semver.satisfies('0.1.1-rc.2', '^0.1.0-rc.6') === false`——semver 规定预发布版本只能满足与其 [major.minor.patch] 元组相同的比较器,`^0.1.0-rc.6` 只认 0.1.0 元组的预发布。**当前声明与运行时不匹配**。cordis `^4.0.1` 覆盖 4.0.2,无需改 | 需要放宽四个 `dsh-*` 范围 |
 | R6 | 开关泛化 `enableWordTools`/`enableExcelTools`(可选) | ROADMAP 自身条件:「仅当有用户提出同类共存需求再做」;尚无用户提出 | 本版不做,决策记录在案 |
+| R7 | DSH Store(AI-Scarlett)字节上限(0.6.0 追加) | 其 #334 自动审查:提交的运行时文件单文件 ≤262,144 B、总量 ≤2,097,152 B,超限即更新暂缓;我们内联架构的 `lib/index.js` 2,479,019 B 单文件超 8.4 倍 | 去内联化:Office 库移回 `dependencies`,`lib/index.js` 只含自有代码 |
 
 另按 ROADMAP「持续卫生」核对(2026-09-01):SheetJS CDN 仍以 0.20.3 为最新(0.20.5 tarball 404);docx 9.7.1 / jszip 3.10.1 / pptxgenjs 4.0.1 均为 npm 最新且与 lockfile 一致——依赖无需升级。
 
@@ -75,7 +76,14 @@ ROADMAP 为 v0.6.0 列了六项需求。逐项核实当前状态:
 
 `docs/hub-registration.md`:`version` 0.1.0 → 0.6.0;`risk.facts` 补 `provenance: true` 与 `ciMatrix: node 20/22`;维护者步骤补「先发 npm(经 publish.yml),Registry 条目以 npm 版本为准」。实际提交动作(Atlas 建条目 → `registry:vendor` → PR)不变,仍由维护者执行。
 
-### 3.6 版本化与文档同步
+### 3.6 DSH Store 字节上限(R7,0.6.0 追加)
+
+- **实测排除内联变体**:未压缩 `lib/index.js` 2,479,019 B;esbuild minify 后 1,319,961 B——总量可过 2 MiB 但单文件仍超 256 KiB 达 5 倍;xlsx 单模块压缩后即超 256 KiB,任何打包器都不能把一个模块拆进多个文件,故**内联架构与单文件上限数学上不相容**,压缩/拆分路线整体死亡。
+- **方案**:docx/jszip/pptxgenjs 移回 npm `dependencies`,xlsx 保持 CDN 0.20.3 tarball URL 依赖;`build.mjs` 把四库 external 化并删除为内联 xlsx 服务的 `createRequire` banner;`lib/index.js` 只含自有代码 + schemastery。
+- **风险控制**:测试套件本就按非内联解析运行(vitest 直接走 node_modules,bundle 只是发布产物),等于运行时依赖模式已被 55 例全量验证;另做纯 Node ESM `import` 冒烟(external 依赖真实解析)。jszip 维持 `^3.10.1`——守卫读的 `_data` 字段若在未来版本消失,行为是按条目静默跳过(降级为 50 MiB 压缩上限)而非崩溃。
+- **代价**:推翻 0.2.0「tarball 零依赖自包含」性质,安装需联网拉 ~15–20 MB 依赖(含 cdn.sheetjs.com,当前网络实测可达);npm 包 550 kB → 31.8 kB。
+
+### 3.7 版本化与文档同步
 
 - `package.json` + `dsh.plugin.json` → `0.6.0`;CHANGELOG 新增 0.6.0(Added: 发布工作流/CI 矩阵/演示章节+trio 测试;Changed: peer 放宽附实测依据;Docs: hub 材料)。
 - ROADMAP 0.6.0 节标记已实施,记录与原规划的偏差(GIF→SVG、hub 提交仍待外部动作、R6 维持不做)。
@@ -90,7 +98,8 @@ ROADMAP 为 v0.6.0 列了六项需求。逐项核实当前状态:
 4. README 双语均含 Demo 章节与 SVG 引用;`docs/demo/session.svg` 存在且被两份 README 引用;`tests/demo-trio.spec.ts` 进仓库并通过。
 5. `hub-registration.md` 条目版本 = 0.6.0。
 6. `package.json`、`dsh.plugin.json`、CHANGELOG 三处版本一致 = 0.6.0;`lib/` 由本次源码状态重建。
-7. 发版卫生四文档(CHANGELOG/README/DEVELOPMENT/AGENTS)同步完成。
+7. 运行时文件满足 DSH Store 上限(实测):最大 `.js` = 90,592 B ≤ 262,144;`lib/` 内 js+d.ts 总量 = 101,588 B ≤ 2,097,152;`node --input-type=module` 导入 `lib/index.js` 冒烟通过(name/inject/apply/Config 均可解析)。
+8. 发版卫生四文档(CHANGELOG/README/DEVELOPMENT/AGENTS)同步完成。
 
 ## 5. 风险与对策
 

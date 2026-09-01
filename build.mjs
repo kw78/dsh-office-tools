@@ -1,16 +1,15 @@
 /**
  * ESM host build for dsh-office-tools.
  *
- * The harness profile resolves `main` (`lib/index.js`). Office libraries
- * (docx / xlsx / pptxgenjs / jszip) are bundled into the single host
- * artifact so a profile install never needs to resolve their internals;
- * @deepseek-ai/dsh-* and cordis stay external (the profile's healed
- * node_modules provides them). Type declarations are emitted by tsc.
- *
- * The CJS office library `xlsx` contains dynamic `require("fs")` /
- * `require("stream")` calls. The banner installs a real CommonJS `require`
- * for this ESM artifact so those calls resolve Node builtins instead of
- * hitting esbuild's "Dynamic require is not supported" throw.
+ * The harness profile resolves `main` (`lib/index.js`). The artifact bundles
+ * only this plugin's own code plus `@deepseek-ai/schemastery` (needed by the
+ * Loader to validate `Config`); the Office libraries (docx / xlsx / pptxgenjs
+ * / jszip) stay external and resolve from the profile's node_modules at
+ * runtime — they are regular `dependencies` (0.6.0: committed runtime files
+ * must fit third-party store review byte bounds — 256 KiB per file makes any
+ * inlined layout impossible, since the xlsx module alone exceeds it even
+ * minified). `@deepseek-ai/dsh-*` and `cordis` stay external (the profile's
+ * healed node_modules provides them). Type declarations are emitted by tsc.
  */
 
 import { build } from 'esbuild'
@@ -26,10 +25,14 @@ await build({
   platform: 'node',
   target: ['node22'],
   sourcemap: true,
-  external: ['@deepseek-ai/cordis', '@deepseek-ai/dsh-*'],
-  banner: {
-    js: "import { createRequire as __createRequire } from 'node:module'; var require = __createRequire(import.meta.url);",
-  },
+  external: [
+    '@deepseek-ai/cordis',
+    '@deepseek-ai/dsh-*',
+    'docx',
+    'jszip',
+    'pptxgenjs',
+    'xlsx',
+  ],
   logLevel: 'info',
 })
 
