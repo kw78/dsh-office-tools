@@ -9,12 +9,28 @@ name: publish
 on:
   release:
     types: [published]
+  push:
+    tags: ['v*']
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
+  # Tag pushes create the GitHub Release object directly (no manual click);
+  # releases created by GITHUB_TOKEN do not re-trigger this workflow, so the
+  # two paths cannot double-publish.
+  github-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the GitHub Release for the pushed tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes
+
   publish-npm:
     runs-on: ubuntu-latest
     steps:
