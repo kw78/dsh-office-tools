@@ -1,7 +1,8 @@
 /**
- * Zip-bomb guard tests for `loadZipGuarded` (v0.3.0 stream C): declared-size
- * budgets, the entry-count budget, friendly pseudo-zip refusal, and tool-level
- * regression through word_read / excel_read / ppt_read.
+ * Zip-bomb guard tests for `readZip` (v0.3.0 stream C, ported to the
+ * self-contained reader in 1.0.0): declared-size budgets, the entry-count
+ * budget, friendly pseudo-zip refusal, and tool-level regression through
+ * word_read / excel_read / ppt_read.
  */
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -9,10 +10,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import JSZip from 'jszip'
-import { loadZipGuarded } from '../src/paths.ts'
+import { readZip } from '../src/asciizip.ts'
 import { mountTools, run } from './harness.ts'
-
-const SIGNAL = new AbortController().signal
 
 /** A real high-ratio archive: `declaredBytes` of repetitive text, deflated. */
 async function bombZip(declaredBytes: number): Promise<Buffer> {
@@ -21,16 +20,17 @@ async function bombZip(declaredBytes: number): Promise<Buffer> {
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
 }
 
-describe('loadZipGuarded declared-size budgets', () => {
+describe('readZip declared-size budgets', () => {
   test('accepts a high-ratio archive within the default budgets', async () => {
     const buffer = await bombZip(10 * 1024 * 1024)
-    const zip = await loadZipGuarded(buffer, SIGNAL)
-    expect(Object.keys(zip.files)).toContain('word/document.xml')
+    const zip = readZip(buffer)
+    expect(zip.has('word/document.xml')).toBe(true)
+    expect(zip.entryText('word/document.xml').length).toBe(10 * 1024 * 1024)
   })
 
   test('refuses one entry above the injected per-entry budget', async () => {
     const buffer = await bombZip(10 * 1024 * 1024)
-    await expect(loadZipGuarded(buffer, SIGNAL, { maxEntryBytes: 1024 * 1024 })).rejects.toThrow(
+    expect(() => readZip(buffer, { maxEntryBytes: 1024 * 1024 })).toThrow(
       /word\/document\.xml" declares 10485760 uncompressed bytes; office tools refuse entries above 1048576 bytes/,
     )
   })
@@ -40,7 +40,7 @@ describe('loadZipGuarded declared-size budgets', () => {
     zip.file('a.txt', 'A'.repeat(4 * 1024 * 1024))
     zip.file('b.txt', 'B'.repeat(4 * 1024 * 1024))
     const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
-    await expect(loadZipGuarded(buffer, SIGNAL, { maxTotalBytes: 5 * 1024 * 1024 })).rejects.toThrow(
+    expect(() => readZip(buffer, { maxTotalBytes: 5 * 1024 * 1024 })).toThrow(
       /more than 5242880 uncompressed bytes in total/,
     )
   })
@@ -49,14 +49,24 @@ describe('loadZipGuarded declared-size budgets', () => {
     const zip = new JSZip()
     for (let index = 0; index < 5; index += 1) zip.file(`part${index}.xml`, 'x')
     const buffer = await zip.generateAsync({ type: 'nodebuffer' })
-    await expect(loadZipGuarded(buffer, SIGNAL, { maxEntries: 4 })).rejects.toThrow(
+    expect(() => readZip(buffer, { maxEntries: 4 })).toThrow(
       /holds 5 entries; office tools refuse archives with more than 4/,
     )
   })
 
-  test('pseudo-zip bytes get a friendly refusal', async () => {
+  test('pseudo-zip bytes get a friendly refusal', () => {
     const buffer = Buffer.from('this is obviously not a zip archive'.repeat(8))
-    await expect(loadZipGuarded(buffer, SIGNAL)).rejects.toThrow('not a readable zip archive')
+    expect(() => readZip(buffer)).toThrow('not a readable zip archive')
+  })
+
+  test('writer output round-trips through the reader with valid CRCs', async () => {
+    const zip = new JSZip()
+    zip.file('[Content_Types].xml', '<?xml version="1.0"?><Types/>')
+    const buffer = await zip.generateAsync({ type: 'nodebuffer' })
+    const read = readZip(buffer)
+    expect(read.entryNames()).toEqual(['[Content_Types].xml'])
+    // The writer may pad parts with trailing newlines (legal after the XML root).
+    expect(read.entryText('[Content_Types].xml').replace(/\n+$/, '')).toBe('<?xml version="1.0"?><Types/>')
   })
 })
 

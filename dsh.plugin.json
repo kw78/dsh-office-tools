@@ -1,10 +1,10 @@
 {
   "id": "dsh-office-tools",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "main": "lib/index.js",
-  "description": "Office tools for the model: create, read, and update Word (.docx), Excel (.xlsx), and PowerPoint (.pptx) files inside the session workspace.",
+  "description": "Office tools for the model: create, read, and update Word (.docx), Excel (.xlsx), and PowerPoint (.pptx) files inside the session workspace through the official DSH filesystem service.",
   "engines": {
-    "dsh": ">=0.0.1"
+    "dsh": ">=0.1.0-rc.6"
   },
   "contributes": {
     "tools": [

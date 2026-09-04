@@ -11,20 +11,18 @@ import { describe, expect, test } from 'vitest'
 import JSZip from 'jszip'
 import { mountTools, run } from './harness.ts'
 
-const TINY_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-  'base64',
-)
-
 /** One slide with body text around a 2x2 table, plus a picture without alt text. */
 const SLIDE_WITH_TABLE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:cSld><p:spTree>
     <p:sp><p:txBody><a:p><a:r><a:t>before table</a:t></a:r></a:p></p:txBody></p:sp>
-    <a:tbl>
-      <a:tr><a:tc><a:txBody><a:p><a:r><a:t>r1c1</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>r1</a:t></a:r></a:p><a:p><a:r><a:t>c2</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
-      <a:tr><a:tc><a:txBody><a:p><a:r><a:t>r2c1</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t/></a:r></a:p></a:txBody></a:tc></a:tr>
-    </a:tbl>
+    <p:graphicFrame>
+      <p:xfrm><a:off x="1828800" y="3657600"/><a:ext cx="7315200" cy="1828800"/></p:xfrm>
+      <a:tbl>
+        <a:tr><a:tc><a:txBody><a:p><a:r><a:t>r1c1</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>r1</a:t></a:r></a:p><a:p><a:r><a:t>c2</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+        <a:tr><a:tc><a:txBody><a:p><a:r><a:t>r2c1</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t/></a:r></a:p></a:txBody></a:tc></a:tr>
+      </a:tbl>
+    </p:graphicFrame>
     <p:sp><p:txBody><a:p><a:r><a:t>after table</a:t></a:r></a:p></p:txBody></p:sp>
     <p:pic><p:nvPicPr><p:cNvPr id="7" name="Picture 6"></p:cNvPr></p:nvPicPr></p:pic>
   </p:spTree></p:cSld>
@@ -97,19 +95,23 @@ describe('ppt_read image alt texts (0.5.0)', () => {
     }
   })
 
-  test('pptxgenjs decks carry the image source path as alt text', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'dsh-office-pptalt-create-'))
+  test('element geometry is reported per slide with the canvas size', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-office-pptgeom-'))
     try {
-      await writeFile(join(root, 'pic.png'), TINY_PNG)
+      const withBox = SLIDE_WITH_TABLE.replace(
+        '<p:sp><p:txBody><a:p><a:r><a:t>before table</a:t></a:r></a:p></p:txBody></p:sp>',
+        '<p:sp><p:spPr><a:xfrm><a:off x="914400" y="1828800"/><a:ext cx="4572000" cy="914400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:p><a:r><a:t>before table</a:t></a:r></a:p></p:txBody></p:sp>',
+      )
+      await writeFile(join(root, 'deck.pptx'), await buildPptx([withBox]))
       const tools = mountTools()
-      await run(tools, 'ppt_create', {
-        path: 'deck.pptx',
-        slides: [{ title: 'Chart slide', images: [{ path: 'pic.png' }] }],
-      }, root)
-
       const read = await run(tools, 'ppt_read', { path: 'deck.pptx' }, root) as any
-      expect(read.slides[0].imageCount).toBe(1)
-      expect(read.slides[0].imageAlts).toEqual([join(root, 'pic.png')])
+
+      expect(read.slideWidthInches).toBeGreaterThan(13)
+      expect(read.slideHeightInches).toBe(7.5)
+      const box = read.slides[0].elements.find((element: any) => element.type === 'text' && element.text === 'before table')
+      expect(box).toMatchObject({ xIn: 1, yIn: 2, wIn: 5, hIn: 1 })
+      const table = read.slides[0].elements.find((element: any) => element.type === 'table')
+      expect(table).toBeDefined()
     } finally {
       await rm(root, { recursive: true, force: true })
     }

@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { ToolRuntime, assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import { apply, Config } from '../src/index.ts'
-import { resolveOfficePath } from '../src/paths.ts'
+import { resolveOfficePath } from '../src/fschannel.ts'
+import { execFor, mountTools, run, testFileSystem } from './harness.ts'
 
 interface ToolRegistryLike {
   register(definition: ToolDefinition): () => void
@@ -16,45 +16,11 @@ interface AgentLike {
   session: { header: { cwd: string } }
 }
 
-/** 1x1 red PNG used by the ppt image-embedding tests. */
+/** 1x1 red PNG used by the ppt linked-image tests. */
 const TINY_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
   'base64',
 )
-
-function execFor(root: string): ToolRunContext {
-  return {
-    signal: new AbortController().signal,
-    agent: { session: { header: { cwd: root } } } as AgentLike,
-    callId: 'test-call',
-    name: 'test',
-    arguments: {},
-  } as unknown as ToolRunContext
-}
-
-function mountTools(config?: { enablePptTools?: boolean }): Map<string, ToolDefinition> {
-  const tools = new Map<string, ToolDefinition>()
-  const context = {
-    tools: {
-      register(definition: ToolDefinition) {
-        if (tools.has(definition.name)) throw new Error(`duplicate tool ${definition.name}`)
-        tools.set(definition.name, definition)
-        return () => tools.delete(definition.name)
-      },
-    } as ToolRegistryLike,
-    effect(setup: () => () => void) {
-      return setup()
-    },
-  } as unknown as Context
-  apply(context, config)
-  return tools
-}
-
-async function run(tools: Map<string, ToolDefinition>, name: string, args: Record<string, unknown>, root: string) {
-  const tool = tools.get(name)
-  expect(tool, `tool ${name} should be registered`).toBeDefined()
-  return tool!.execute(args, execFor(root))
-}
 
 describe('tool registration', () => {
   test('registers all eight office tools exactly once', () => {
@@ -78,6 +44,7 @@ describe('tool registration', () => {
   test('registers against the real dsh-tools runtime', () => {
     const context = new Context()
     context.provide('systemPrompt', { tools() {}, section() {} })
+    context.provide('fs', testFileSystem())
     new ToolRuntime(context)
     apply(context)
     expect(context.tools.schemas().map(schema => schema.name).sort()).toEqual([
@@ -118,6 +85,7 @@ describe('enablePptTools config switch', () => {
   test('real runtime honors enablePptTools: false', () => {
     const context = new Context()
     context.provide('systemPrompt', { tools() {}, section() {} })
+    context.provide('fs', testFileSystem())
     new ToolRuntime(context)
     apply(context, { enablePptTools: false })
     expect(context.tools.schemas().map(schema => schema.name).sort()).toEqual([
@@ -287,7 +255,7 @@ describe('ppt tools', () => {
     }
   })
 
-  test('embeds images from the workspace and reports them on read', async () => {
+  test('links workspace images with agent-controlled placement and reports geometry', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-office-ppt-img-'))
     try {
       await writeFile(join(root, 'pic.png'), TINY_PNG)
@@ -295,16 +263,21 @@ describe('ppt tools', () => {
       const created = await run(tools, 'ppt_create', {
         path: 'with-image.pptx',
         slides: [
-          { title: 'Chart slide', bullets: ['trend is up'], images: [{ path: 'pic.png' }] },
+          { title: 'Chart slide', bullets: ['trend is up'], images: [{ path: 'pic.png', x: 2, y: 3, w: 4, h: 2, alt: 'revenue chart' }] },
           { paragraphs: ['No images here'] },
         ],
       }, root) as any
 
       expect(created.slideCount).toBe(2)
-      expect(created.imageCount).toBe(1)
+      expect(created.slideWidthInches).toBeGreaterThan(13)
+      const image = created.slides[0].elements.find((element: any) => element.type === 'image')
+      expect(image).toMatchObject({ xIn: 2, yIn: 3, wIn: 4, hIn: 2, alt: 'revenue chart' })
+      expect(image.path).toBe('pic.png')
 
       const read = await run(tools, 'ppt_read', { path: 'with-image.pptx' }, root) as any
       expect(read.slides[0].imageCount).toBe(1)
+      expect(read.slides[0].imageAlts).toEqual(['revenue chart'])
+      expect(read.slides[0].elements.some((element: any) => element.type === 'image' && element.wIn === 4)).toBe(true)
       expect(read.slides[1].imageCount).toBe(0)
       expect(read.slides[0].paragraphs.join('\n')).toContain('Chart slide')
 
@@ -327,13 +300,14 @@ describe('workspace confinement', () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-office-paths-'))
     const outside = await mkdtemp(join(tmpdir(), 'dsh-office-outside-'))
     try {
-      const resolved = await resolveOfficePath(execFor(root), 'sub/plan.docx', ['.docx'], false)
+      const fsContext = { fs: testFileSystem() }
+      const resolved = await resolveOfficePath(execFor(root), fsContext, 'sub/plan.docx', ['.docx'], false)
       expect(resolved.absolute).toBe(resolve(root, 'sub/plan.docx'))
       expect(resolved.display).toBe(join('sub', 'plan.docx'))
 
-      await expect(resolveOfficePath(execFor(root), '../escape.docx', ['.docx'], false)).rejects.toThrow('escapes')
-      await expect(resolveOfficePath(execFor(root), join(outside, 'escape.docx'), ['.docx'], false)).rejects.toThrow('escapes')
-      await expect(resolveOfficePath(execFor(root), 'plan.xlsx', ['.docx'], false)).rejects.toThrow('expected .docx')
+      await expect(resolveOfficePath(execFor(root), fsContext, '../escape.docx', ['.docx'], false)).rejects.toThrow('escapes')
+      await expect(resolveOfficePath(execFor(root), fsContext, join(outside, 'escape.docx'), ['.docx'], false)).rejects.toThrow('escapes')
+      await expect(resolveOfficePath(execFor(root), fsContext, 'plan.xlsx', ['.docx'], false)).rejects.toThrow('expected .docx')
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(outside, { recursive: true, force: true })
@@ -354,6 +328,38 @@ describe('artifact bytes', () => {
         const bytes = await readFile(join(root, name))
         expect(bytes.subarray(0, 2).toString('latin1')).toBe('PK')
       }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('created packages are pure ASCII — the official text-channel invariant', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-office-ascii-'))
+    try {
+      const tools = mountTools()
+      await run(tools, 'word_create', { path: 'a.docx', title: 'T', paragraphs: ['ascii'], bullets: ['b'], table: { headers: ['h'], rows: [['r']] } }, root)
+      await run(tools, 'excel_create', { path: 'a.xlsx', sheets: [{ name: 'S', rows: [['t', 1, true, '=A1']] }] }, root)
+      await run(tools, 'ppt_create', { path: 'a.pptx', title: 'D', slides: [{ title: 's', bullets: ['x'], notes: 'n' }] }, root)
+
+      for (const name of ['a.docx', 'a.xlsx', 'a.pptx']) {
+        const bytes = await readFile(join(root, name))
+        const offender = bytes.findIndex(byte => byte > 0x7f)
+        expect(offender, `${name} has a non-ASCII byte at ${offender}`).toBe(-1)
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('non-ASCII content encodes as character references, not raw bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-office-ascii-cjk-'))
+    try {
+      const tools = mountTools()
+      await run(tools, 'word_create', { path: 'a.docx', paragraphs: ['中文段落 \u2014 em dash'] }, root)
+      const bytes = await readFile(join(root, 'a.docx'))
+      expect(bytes.findIndex(byte => byte > 0x7f)).toBe(-1)
+      const read = await run(tools, 'word_read', { path: 'a.docx' }, root) as any
+      expect(read.text).toContain('中文段落 — em dash')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

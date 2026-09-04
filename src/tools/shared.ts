@@ -1,6 +1,9 @@
 /**
- * Shared schema fragments and cell types for the Office tool suite. Keeping
- * the schemas in one place keeps the seven tool contracts consistent.
+ * Shared schema fragments, cell types, and the ASCII-safe XML encoders for
+ * the Office tool suite. Keeping the schemas in one place keeps the eight
+ * tool contracts consistent; the encoders guarantee that generated XML stays
+ * pure ASCII (non-ASCII text becomes decimal character references), which is
+ * the invariant the ASCII-safe zip writer builds on.
  */
 
 import type { ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
@@ -36,6 +39,45 @@ export type CellValue = string | number | boolean | null
 export type CellRow = CellValue[]
 
 /**
+ * Encode one character for XML text or a double-quoted attribute value: the
+ * five predefined entities, control characters, and — critically for the
+ * ASCII-safe container — every code point above 0x7F as a decimal character
+ * reference.
+ */
+function encodeXmlChar(code: number): string {
+  if (code > 0x7f) return `&#${code};`
+  if (code < 0x20 && code !== 0x9 && code !== 0xa && code !== 0xd) return ''
+  return String.fromCharCode(code)
+}
+
+/** Escape text for XML element content, keeping the output pure ASCII. */
+export function encodeXmlText(value: string): string {
+  let out = ''
+  for (const char of value) {
+    const code = char.codePointAt(0)!
+    if (char === '&') out += '&amp;'
+    else if (char === '<') out += '&lt;'
+    else if (char === '>') out += '&gt;'
+    else out += encodeXmlChar(code)
+  }
+  return out
+}
+
+/** Escape text for a double-quoted XML attribute value, keeping it pure ASCII. */
+export function encodeXmlAttribute(value: string): string {
+  let out = ''
+  for (const char of value) {
+    const code = char.codePointAt(0)!
+    if (char === '&') out += '&amp;'
+    else if (char === '<') out += '&lt;'
+    else if (char === '>') out += '&gt;'
+    else if (char === '"') out += '&quot;'
+    else out += encodeXmlChar(code)
+  }
+  return out
+}
+
+/**
  * Decode the XML entities that can legally appear in OOXML text content: the
  * five predefined names plus decimal/hex character references.
  */
@@ -50,4 +92,3 @@ export function decodeXmlEntities(value: string): string {
     return Number.isFinite(number) ? String.fromCodePoint(number) : entity
   })
 }
-

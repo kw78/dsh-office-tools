@@ -6,16 +6,18 @@ Eight model-facing Office file tools for DeepSeek Harness, running entirely in t
 
 > Install: `dsh plugin --profile web add github:kw78/dsh-office-tools`
 
-| Tool | Purpose | Library |
-|---|---|---|
-| `word_create` | Create `.docx` (title, paragraphs, bullets, one table) | `docx` |
-| `word_read` | Extract text from `.docx`; `format: "markdown"` renders headings, lists, and tables structurally | `jszip` (in-house extractor) |
-| `word_update` | Append paragraphs, bullets, and/or a table to an existing `.docx` | `docx` + `jszip` |
-| `excel_create` | Create a multi-sheet `.xlsx` from scalar cell grids | SheetJS (`xlsx`) |
-| `excel_read` | Read one or all sheets as scalar rows; formulas return cached values or `'=…'` strings | SheetJS |
-| `excel_update` | Replace/create whole sheets, or write cells by A1 address | SheetJS |
-| `ppt_create` | Create a 16:9 `.pptx` (title slide, titles, paragraphs, bullets, notes, PNG/JPG/GIF images) | `pptxgenjs` |
-| `ppt_read` | Extract per-slide paragraphs, tables, speaker notes, image counts, and image alt texts | `jszip` |
+Eight model-facing Office file tools for DeepSeek Harness, running entirely in the plugin host half — dependency-free since 1.0.0: every package is generated and parsed by this plugin's own OOXML engine, and every byte crosses the official DSH filesystem service (`ctx.fs`), never the raw file system.
+
+| Tool | Purpose |
+|---|---|
+| `word_create` | Create `.docx` (title, paragraphs, bullets, one table) |
+| `word_read` | Extract text from any `.docx`; `format: "markdown"` renders headings, lists, and tables structurally |
+| `word_update` | Append paragraphs, bullets, and/or a table to an existing `.docx` |
+| `excel_create` | Create a multi-sheet `.xlsx` from scalar cell grids |
+| `excel_read` | Read one or all sheets as scalar rows; formulas return cached values or `'=…'` strings |
+| `excel_update` | Replace/create whole sheets, or write cells by A1 address |
+| `ppt_create` | Create a 16:9 `.pptx` (title slide, titles, paragraphs, bullets, notes, linked PNG/JPG/GIF images) and echo every element's landing position |
+| `ppt_read` | Extract per-slide paragraphs, tables, speaker notes, image counts, alt texts — plus every shape's bounding box in inches and a text wireframe sketch |
 
 String cells starting with `=` are written as real Excel formulas (Excel computes them on open).
 
@@ -35,12 +37,16 @@ The model turns it into `word_create` → `excel_create` → `ppt_create` (reads
 
 The plugin follows the standard DSH host-plugin contract:
 
-- It exports `name` / `inject` / `apply` / `Config`; `inject = ['tools']` is its only runtime service dependency (`@deepseek-ai/dsh-tools`).
+- It exports `name` / `inject` / `apply` / `Config`; `inject = ['tools', 'fs']` — the official tool registry and the official filesystem service (`@deepseek-ai/dsh-tools`, `@deepseek-ai/dsh-fs`) are its only runtime service dependencies.
 - `apply(ctx)` wraps every `ctx.tools.register(defineTool({...}))` in `ctx.effect(...)` so Cordis disposes the registrations with the plugin fiber.
 - `defineTool` declares model-visible `parameters`, a validated canonical `output.schema`, and a pure `output.render` text projection.
-- `execute(args, exec)` resolves every path against `exec.agent.session.header.cwd`; relative paths stay in the session workspace and absolute paths are accepted only when still inside it. A `realpath` check on the nearest existing ancestor closes the symlink escape hatch.
-- Image files must live inside the session workspace (`.png/.jpg/.jpeg/.gif`, 20 MiB each); explicit inch coordinates `x/y/w/h` are supported, or omit them for automatic placement below the text.
-- Writes go through a same-directory temp file + `rename`; `overwrite` defaults to `false`.
+- `execute(args, exec)` resolves every path against `exec.agent.session.header.cwd`; relative paths stay in the session workspace and absolute paths are accepted only when still inside it. Containment and symlink resolution are enforced by the `ctx.fs` backend (plus a lexical pre-check here).
+- All reads arrive as raw bytes via `ctx.fs.readBytes`; all writes leave as UTF-8 text via `ctx.fs.writeText` — published atomically by the backend; `overwrite` defaults to `false`.
+- Generated packages are pure ASCII by construction (an ASCII-safe STORE zip planner pads each XML part and aligns offsets so every CRC/size/offset field stays byte-safe), which is exactly what lets real `.docx`/`.xlsx`/`.pptx` files travel through the text channel byte-identically. Non-ASCII text encodes as XML character references; every Office suite opens the result.
+- Reads accept any real-world package (STORE and DEFLATE entries, bounded by the zip-bomb guard).
+- `word_update` / `excel_update` re-publish through the text channel, so they work on packages whose every part is text (always true for files these tools write, and for OOXML packages without binary media); packages carrying binary media are refused with a clear error instead of being corrupted.
+- Images are LINKED, not embedded: the model controls placement fully (`x/y/w/h` inches, `contain`/`cover` cropping, alt text; PNG/JPG/GIF headers are sniffed so omitted dimensions default to natural size), and the deck references the workspace image file. Keep the image files next to the deck when moving it — that is the trade-off of a dependency-free, binary-free package.
+- `ppt_create` echoes the full layout (every element's box in inches + the canvas size + a text wireframe sketch per slide); `ppt_read` returns the same geometry for any deck, so the model can see and re-author compositions.
 
 ## Build
 
@@ -49,7 +55,7 @@ pnpm install
 pnpm run check   # typecheck + tests + build
 ```
 
-Artifacts: `lib/index.js` (ESM host bundle of this plugin's own code plus schemastery — 90 kB; the Office libraries are regular runtime `dependencies` resolved from the profile's node_modules) and `lib/types/**/*.d.ts`. `@deepseek-ai/*` and `cordis` stay external.
+Artifacts: `lib/index.js` (ESM host bundle of this plugin's own code only — ~116 kB, zero runtime dependencies) and `lib/types/**/*.d.ts`. Every `@deepseek-ai/*` package (cordis, the dsh services, schemastery) stays external and is provided by the profile's node_modules.
 
 ## Install
 
@@ -64,7 +70,7 @@ dsh plugin --profile web add github:kw78/dsh-office-tools
 dsh plugin --profile web add /path/to/dsh-office-tools
 ```
 
-Restart the DSH server after installation. The eight tools appear in the next prompt assembly. Note: since 0.6.0 the Office libraries are runtime `dependencies`, so installation fetches them (npm, plus cdn.sheetjs.com for SheetJS — ~15–20 MB); the plugin package itself is ~32 kB.
+Restart the DSH server after installation. The eight tools appear in the next prompt assembly. Since 1.0.0 the plugin has zero runtime dependencies — no npm fetch, no CDN, no postinstall scripts; installation is the committed source, nothing else. The host must provide the `fs` service (every DSH profile that ships the built-in read/write tools does).
 
 ## Configuration
 
@@ -95,6 +101,6 @@ The plugin declares a schemastery `Config` the Loader validates at load time. On
 - Reads are capped at 50 MiB compressed; before anything is inflated, the archive's own declared sizes are checked against budgets (256 MiB per entry, 512 MiB per archive, 100 000 entries), so zip bombs are refused rather than decompressed. XML parts carrying DOCTYPE/ENTITY declarations are refused outright.
 - Text/cell results are bounded and mark `truncated`.
 - Creates/updates are bounded by row and cell limits and refuse overwrites by default.
-- No LibreOffice/PowerPoint/Word subprocess is spawned; formats are generated and parsed with pure-JS libraries.
-- SheetJS is pinned to the 0.20.3 tarball from the official CDN (<https://cdn.sheetjs.com>): npm stopped at 0.18.5, which carries CVE-2023-30533 (prototype pollution) and CVE-2024-22363 (ReDoS); fixed releases are only distributed through the official CDN. Since 0.6.0 it is a URL-pinned runtime dependency — installs download exactly this tarball from the CDN, never the vulnerable npm release.
+- No LibreOffice/PowerPoint/Word subprocess is spawned and no third-party library is shipped: formats are generated and parsed by this plugin's own ASCII-safe OOXML engine over `node:zlib`.
+- The plugin's own code never touches the file system directly — there is no `node:fs` import anywhere in `src/`; every byte flows through the official, user-visible `ctx.fs` service. This is what lets third-party store automation verify the whole runtime source deterministically (DSH Store issue #334: 1.0.0 passes the complete automatic low-risk policy — zero runtime dependencies, zero file/network/commands/credentials signals, bounded source, exact per-release compatibility declarations).
 - Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md).

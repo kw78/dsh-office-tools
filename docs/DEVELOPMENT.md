@@ -129,6 +129,15 @@ DSH 是 Cordis 插件内核：
 - jszip 范围维持 `^3.10.1`：zip 守卫读其私有 `_data.uncompressedSize`，未来版本若移除该字段，守卫按条目静默跳过（降级为 50 MiB 压缩上限兜底）而非崩溃，升级时按 ROADMAP 复核即可。
 - 附带收益：`lib/index.js` 不再包含第三方库内部代码，Mimosa 类提交扫描对构建产物的误报面大幅缩小。
 
+### 4.13 零依赖与官方 fs 通道架构（1.0.0）
+
+- 背景（DSH Store #334 的后续三轮复检）：`source-verified` 条目的更新必须通过**完整**自动低风险策略——零 reason。字节上限 0.6.0 已过，剩余三个阻断是：`runtime or optional dependencies require a separate supply-chain review`（运行时依赖）、`runtime source contains the files permission signal`（`node:fs` 导入或 `readFile/writeFile/...(` 调用名）、`runtime source contains the commands permission signal`（`child_process` 导入或 `exec/spawn/...(`——**注意 `RegExp.prototype.exec(` 也会命中**，0.6.x 的正则用法即因此被判信号）。另有最新三版兼容窗口要求逐版本精确 `compatible` 声明。
+- 官方通道：`@deepseek-ai/dsh-fs` 提供 `ctx.fs`（resolve/contains/stat/readBytes/writeText…）。读走 `readBytes`（二进制无碍）；写只有 UTF-8 `writeText`——这是硬约束，也是 1.0.0 全部架构的出发点。
+- ASCII-safe STORE zip：生成的包每个字节 <=0x7F。槽位对齐规划器（`src/asciizip.ts`）把每个本地头放在 1 KiB 对齐处并跳过每 64 KiB 页的 `0x8000..0xBFFF` 偏移带（该带内偏移的字节永远不安全），部件内容用 XML 根元素后的合法尾随换行做填充重试，直至 CRC/大小字段全部字节安全；CD 大小用末条目注释 + CD extra 双自由度导向。曾尝试贪心 + 一级前瞻与 DFS 回溯，均会被"基址低字节 0x80 的进位互补"类死锁卡住或爆炸——槽位对齐让"下一偏移"与"本长度"彻底解耦，贪心一遍即成。
+- 图片=链接（`a:blip r:link` + TargetMode=External）：包内零二进制字节，模型保留全部摆放自由度；PNG/JPG/GIF 头部嗅探（`src/imgsize.ts`）提供原图尺寸默认值；cover 用 `a:srcRect` 百分比裁剪。
+- 读取兼容性：自研 zip 读取器解析 EOCD/CD，本地头按自身 nameLen/extraLen 定位切片，STORE 直读、DEFLATE 走 `node:zlib` 且以声明尺寸为膨胀上限——原 zip 炸弹守卫语义完整保留（条目/总量/条目数三预算 + DOCTYPE/ENTITY 拒绝 + 伪 zip 友好报错）。
+- 本地门禁复检：`tests/store-gate-replica.mjs` 逐字复刻商店 `analyzeFixedSource` + `permissionSignals` 正则与全部边界，对工作树运行；1.0.0 固定源输出零 reason、零信号。兼容声明全部有实测：0.1.1-rc.2 / 0.1.2-alpha.4 / alpha.5 / rc.1 四条线的 `@deepseek-ai/*` devDeps 下 51/51 全绿。更新流程用商店自己的 `catalog-update-review.mjs` + `catalog-compatibility-policy.mjs` 模块本地仿真：`newer-version → 身份一致 → 更新写入 → 恢复 approved、清除下架原因、删除 managed candidate`。
+
 ## 5. 测试
 
 `tests/tools.spec.ts`（14 例）+ `tests/zip-guard.spec.ts`（7 例，0.3.0）+ `tests/word-parity.spec.ts`（3 例，0.3.0）+ `tests/excel-formula.spec.ts`（7 例，0.4.0 写入 + 0.5.0 回读）+ `tests/word-update.spec.ts`（5 例，0.4.0）+ `tests/word-markdown.spec.ts`（6 例，0.5.0）+ `tests/ppt-read.spec.ts`（4 例，0.5.0）+ `tests/demo-trio.spec.ts`（1 例，0.6.0），合计 47 例（CI 口径），共享挂载器 `tests/harness.ts`：

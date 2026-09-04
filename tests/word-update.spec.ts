@@ -138,4 +138,29 @@ describe('word_update', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+  test('refuses rewrites of packages carrying binary parts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-office-wu-binary-'))
+    try {
+      const zip = new JSZip()
+      zip.file('[Content_Types].xml', '<?xml version="1.0"?><Types/>')
+      zip.file(
+        'word/document.xml',
+        '<?xml version="1.0"?>'
+          + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+          + '<w:p><w:r><w:t>binary media below</w:t></w:r></w:p>'
+          + '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>'
+          + '</w:body></w:document>',
+      )
+      // A part with non-ASCII bytes stands in for embedded media: it cannot
+      // round-trip the official UTF-8 text channel.
+      zip.file('word/media/image1.png', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x9a, 0xc4, 0xff, 0xfe, 0x01]))
+      await writeFile(join(root, 'media.docx'), await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }))
+
+      const tools = mountTools()
+      await expect(run(tools, 'word_update', { path: 'media.docx', paragraphs: ['x'] }, root)).rejects.toThrow('non-ASCII')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
+
