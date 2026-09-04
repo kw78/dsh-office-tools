@@ -19,9 +19,9 @@ jobs:
         node-version: [20, 22]
     steps:
       - uses: actions/checkout@v4
+      # Version comes from package.json's packageManager field (single
+      # source of truth, pinned to the lockfile generator).
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
