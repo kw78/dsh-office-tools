@@ -1,6 +1,6 @@
 {
   "name": "dsh-office-tools",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DSH model-facing Office tools: create, read, and update Word (.docx), Excel (.xlsx), and PowerPoint (.pptx) files inside the session workspace, entirely through the official DSH filesystem service.",
   "license": "MIT",
   "type": "module",
@@ -114,5 +114,47 @@
   "publishConfig": {
     "access": "public"
   },
-  "packageManager": "pnpm@10.34.5"
+  "packageManager": "pnpm@10.34.5",
+  "dshWorkshop": {
+    "schema": "omdsh-workshop-package/v1",
+    "type": "plugin",
+    "integration": {
+      "protocol": "harness-profile",
+      "artifact": "cordis.patch.yml"
+    },
+    "install": {
+      "mode": "transactional",
+      "adapter": "profile-bundle",
+      "failurePolicy": "generation-rollback",
+      "touchesCurrentBeforeActivation": false
+    },
+    "lifecycle": {
+      "activation": "restart-profile",
+      "dispose": "supported"
+    },
+    "permissions": [
+      "files:workspace-read",
+      "files:workspace-write"
+    ],
+    "compatibility": {
+      "dshVersions": [
+        "0.1.1-rc.2",
+        "0.1.2-alpha.4",
+        "0.1.2-alpha.5",
+        "0.1.2-rc.1"
+      ]
+    },
+    "capability": {
+      "id": "word_create",
+      "kind": "tool",
+      "invocation": "word_create({\"path\": \"hub-check.docx\", \"paragraphs\": [\"dsh-hub intake check\"]}) in a session with workspace cwd",
+      "expected": "a real .docx (first two bytes PK) exists at the workspace path; the result reports sizeBytes > 0; word_read returns 'dsh-hub intake check'"
+    },
+    "evidence": {
+      "install": null,
+      "failureIsolation": null,
+      "hotReload": null,
+      "remove": null
+    }
+  }
 }

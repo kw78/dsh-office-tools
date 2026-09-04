@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-09-05
+
+Hub-intake manifest release: `package.json#dshWorkshop` (`omdsh-workshop-package/v1`) declaring the profile-bundle integration, transactional install policy, lifecycle, structured permissions, tested compatibility set, and the `word_create` capability target. No code changes since 1.0.0.
+
 ## [1.0.0] - 2026-09-04
 
 Dependency-free, official-fs-channel release: the whole tool suite was rewritten on a self-contained OOXML engine and every byte now crosses the official `ctx.fs` service, which clears the remaining DSH Store automatic-policy blockers (AI-Scarlett/DSH-Store#334) without giving up real Office files.
