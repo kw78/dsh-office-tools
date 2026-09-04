@@ -4,6 +4,8 @@
 
 > 安装：`dsh plugin --profile web add github:kw78/dsh-office-tools`
 
+> DSH Store 固定 Commit 校验源：`ae1ddd40f98debf4b1430748d287951f35faaf36`（tag `v1.0.0`）。其后的 `main` 提交仅为测试/文档补充，除非版本号提升。
+
 为 DeepSeek Harness 提供 8 个模型可调用的 Office 文件工具，全部运行在 host 半 —— 1.0.0 起零运行时依赖：所有文件由插件自带的 OOXML 引擎生成与解析，所有字节都经由官方文件服务 `ctx.fs` 传输，插件自身不直接触碰文件系统。
 
 | 工具 | 作用 |

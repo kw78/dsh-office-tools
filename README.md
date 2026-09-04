@@ -6,6 +6,8 @@ Eight model-facing Office file tools for DeepSeek Harness, running entirely in t
 
 > Install: `dsh plugin --profile web add github:kw78/dsh-office-tools`
 
+> DSH Store lists a fixed Commit; verify the installed source against it: `ae1ddd40f98debf4b1430748d287951f35faaf36` (tag `v1.0.0`). Later commits on `main` carry test/doc additions only unless the version bumps.
+
 Eight model-facing Office file tools for DeepSeek Harness, running entirely in the plugin host half — dependency-free since 1.0.0: every package is generated and parsed by this plugin's own OOXML engine, and every byte crosses the official DSH filesystem service (`ctx.fs`), never the raw file system.
 
 | Tool | Purpose |
