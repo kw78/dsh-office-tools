@@ -14,7 +14,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { buildAsciiZip, readZip, readZipXmlPart, type ZipPart } from '../asciizip.ts'
 import type { FsContext } from '../fschannel.ts'
-import { readOfficeBytes, resolveOfficePath, saveOfficeText } from '../fschannel.ts'
+import { readOfficeBytes, resolveOfficePath, resolveWritePolicy, saveOfficeText } from '../fschannel.ts'
 import { FILE_RESULT_SCHEMA } from './shared.ts'
 import { appendBeforeSectPr, buildAppendFragment, wordCreateCounts, type WordUpdateArgs } from './word.ts'
 
@@ -86,7 +86,8 @@ export function registerWordUpdate(ctx: Context & FsContext): () => void {
       locations: [{ path: args.path }],
     }),
     async execute(args: WordUpdateArgs, exec: ToolRunContext) {
-      const target = await resolveOfficePath(exec, ctx, args.path, ['.docx'], true)
+      const writePolicy = await resolveWritePolicy(ctx, exec)
+      const target = await resolveOfficePath(exec, ctx, args.path, ['.docx'], true, writePolicy)
       const { paragraphs: paragraphCount, cells } = wordCreateCounts(args)
       if ((args.paragraphs?.length ?? 0) === 0 && (args.bullets?.length ?? 0) === 0 && args.table === undefined) {
         throw new Error('word_update needs at least one of paragraphs, bullets, or table')
@@ -116,7 +117,7 @@ export function registerWordUpdate(ctx: Context & FsContext): () => void {
       }
       const text = buildAsciiZip(parts)
       exec.signal.throwIfAborted()
-      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text)
+      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text, writePolicy)
       return {
         path: target.display,
         sizeBytes,

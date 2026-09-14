@@ -12,7 +12,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { buildAsciiZip, readZip, readZipXmlPart, type ZipPart } from '../asciizip.ts'
 import {
-  assertMayCreate, MAX_TEXT_CHARS, readOfficeBytes, resolveOfficePath, saveOfficeText,
+  assertMayCreate, MAX_TEXT_CHARS, readOfficeBytes, resolveOfficePath, resolveWritePolicy, saveOfficeText,
 } from '../fschannel.ts'
 import type { FsContext } from '../fschannel.ts'
 import { decodeXmlEntities, encodeXmlAttribute, encodeXmlText, FILE_RESULT_SCHEMA } from './shared.ts'
@@ -419,7 +419,8 @@ function registerWordCreate(ctx: Context & FsContext): () => void {
       locations: [{ path: args.path }],
     }),
     async execute(args, exec: ToolRunContext) {
-      const target = await resolveOfficePath(exec, ctx, args.path, ['.docx'], false)
+      const writePolicy = await resolveWritePolicy(ctx, exec)
+      const target = await resolveOfficePath(exec, ctx, args.path, ['.docx'], false, writePolicy)
       await assertMayCreate(exec, ctx, target.target, args.overwrite ?? false)
       const { paragraphs: paragraphCount, cells } = wordCreateCounts(args)
       if (paragraphCount > 10_000) throw new Error('too many paragraphs/bullets/table rows (maximum 10000)')
@@ -430,7 +431,7 @@ function registerWordCreate(ctx: Context & FsContext): () => void {
 
       const text = buildDocxText(args)
       exec.signal.throwIfAborted()
-      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text)
+      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text, writePolicy)
       const result: {
         path: string
         sizeBytes: number

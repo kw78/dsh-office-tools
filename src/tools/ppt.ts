@@ -23,7 +23,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { buildAsciiZip, readZip, readZipXmlPart, type ZipPart } from '../asciizip.ts'
 import {
-  assertMayCreate, MAX_TEXT_CHARS, readOfficeBytes, resolveOfficePath, saveOfficeText,
+  assertMayCreate, MAX_TEXT_CHARS, readOfficeBytes, resolveOfficePath, resolveWritePolicy, saveOfficeText,
 } from '../fschannel.ts'
 import type { FsContext, ResolvedOfficePath } from '../fschannel.ts'
 import { sniffImageSize } from '../imgsize.ts'
@@ -965,7 +965,8 @@ function registerPptCreate(ctx: Context & FsContext): () => void {
       locations: [{ path: args.path }],
     }),
     async execute(args, exec: ToolRunContext) {
-      const target = await resolveOfficePath(exec, ctx, args.path, ['.pptx'], false)
+      const writePolicy = await resolveWritePolicy(ctx, exec)
+      const target = await resolveOfficePath(exec, ctx, args.path, ['.pptx'], false, writePolicy)
       await assertMayCreate(exec, ctx, target.target, args.overwrite ?? false)
       if ((args.slides?.length ?? 0) > 0) validateSlideSpecs(args.slides!)
       if (args.title === undefined && (args.slides?.length ?? 0) === 0) {
@@ -975,7 +976,7 @@ function registerPptCreate(ctx: Context & FsContext): () => void {
 
       const { text, layout } = await buildPptxText(args, exec, ctx, target)
       exec.signal.throwIfAborted()
-      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text)
+      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text, writePolicy)
       const result: {
         path: string
         sizeBytes: number

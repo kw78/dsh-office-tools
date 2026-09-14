@@ -145,10 +145,16 @@ export function execFor(root: string): ToolRunContext {
   } as unknown as ToolRunContext
 }
 
-export function mountTools(config?: { enablePptTools?: boolean }): Map<string, ToolDefinition> {
+/** Optional service overrides for mountTools: an fs double and/or a sandbox-policy controller. */
+export interface MountServices {
+  fs?: FileSystem
+  sandboxPolicy?: unknown
+}
+
+export function mountTools(config?: { enablePptTools?: boolean }, services?: MountServices): Map<string, ToolDefinition> {
   const tools = new Map<string, ToolDefinition>()
   const context = {
-    fs: testFileSystem(),
+    fs: services?.fs ?? testFileSystem(),
     tools: {
       register(definition: ToolDefinition) {
         if (tools.has(definition.name)) throw new Error(`duplicate tool ${definition.name}`)
@@ -158,6 +164,9 @@ export function mountTools(config?: { enablePptTools?: boolean }): Map<string, T
     } as ToolRegistryLike,
     effect(setup: () => () => void) {
       return setup()
+    },
+    get(name: string): unknown {
+      return name === 'sandboxPolicy' ? services?.sandboxPolicy : undefined
     },
   } as unknown as Context
   apply(context, config)

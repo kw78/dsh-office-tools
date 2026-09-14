@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-09-14
+
+### Fixed
+
+- **All five write tools were denied on sandboxed deployments** (`@deepseek-ai/dsh-fs-sandbox` with effective mode `workspace-write`; field report against 1.0.0): `saveOfficeText` called `ctx.fs.writeText` without its fifth `sandboxPolicy` parameter, so the backend fenced the write by its deployment-default policy — whose writable roots need not include the session workspace — and every in-session write failed with `FS_SANDBOX_DENIED` while all three read tools worked. Write tools now resolve the per-call policy the way the official fs tool layer does: skip when the mounted backend does not confine (`fs.sandboxMode` undefined), otherwise ask the shared `ctx.sandboxPolicy` service (`@deepseek-ai/dsh-sandbox-policy`) for the calling session (`resolve({ session })` → the session's standing mode and `workspaceRoot`; the office tools advertise no `sandbox_permissions`, so the escalation retry path never applies), pass the policy through to `writeText`, and anchor relative-path resolution to `sandboxPolicy.workspaceRoot`. Bare local backends keep the previous behavior; a confining backend without the policy service now fails loudly before writing (mirroring `dsh-tool-fs`'s own invariant) instead of letting the backend deny with the confusing deployment-default error; the fence itself is untouched — a policy whose root does not contain the target is still denied. `tests/sandbox-write.spec.ts` replicates the backend's per-call-policy/deployment-default fallback semantics and pins all of this.
+
 ## [1.0.1] - 2026-09-05
 
 Hub-intake manifest release: `package.json#dshWorkshop` (`omdsh-workshop-package/v1`) declaring the profile-bundle integration, transactional install policy, lifecycle, structured permissions, tested compatibility set, and the `word_create` capability target. No code changes since 1.0.0.

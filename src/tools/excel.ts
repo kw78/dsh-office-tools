@@ -14,7 +14,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { asciiPartsOf, buildAsciiZip, readZip, readZipXmlPart, type ZipPart } from '../asciizip.ts'
 import {
-  assertMayCreate, MAX_READ_CELLS, MAX_WRITE_CELLS, readOfficeBytes, resolveOfficePath, saveOfficeText,
+  assertMayCreate, MAX_READ_CELLS, MAX_WRITE_CELLS, readOfficeBytes, resolveOfficePath, resolveWritePolicy, saveOfficeText,
 } from '../fschannel.ts'
 import type { FsContext } from '../fschannel.ts'
 import {
@@ -525,7 +525,8 @@ function registerExcelCreate(ctx: Context & FsContext): () => void {
       locations: [{ path: args.path }],
     }),
     async execute(args, exec: ToolRunContext) {
-      const target = await resolveOfficePath(exec, ctx, args.path, ['.xlsx'], false)
+      const writePolicy = await resolveWritePolicy(ctx, exec)
+      const target = await resolveOfficePath(exec, ctx, args.path, ['.xlsx'], false, writePolicy)
       await assertMayCreate(exec, ctx, target.target, args.overwrite ?? false)
       validateSheetSpecs(args.sheets)
       exec.signal.throwIfAborted()
@@ -552,7 +553,7 @@ function registerExcelCreate(ctx: Context & FsContext): () => void {
 
       const text = buildXlsxText(models)
       exec.signal.throwIfAborted()
-      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text)
+      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text, writePolicy)
       return { path: target.display, sizeBytes, sheets: summaries }
     },
   }))
@@ -705,7 +706,8 @@ function registerExcelUpdate(ctx: Context & FsContext): () => void {
       locations: [{ path: args.path }],
     }),
     async execute(args, exec: ToolRunContext) {
-      const target = await resolveOfficePath(exec, ctx, args.path, ['.xlsx'], true)
+      const writePolicy = await resolveWritePolicy(ctx, exec)
+      const target = await resolveOfficePath(exec, ctx, args.path, ['.xlsx'], true, writePolicy)
       if ((args.sheets?.length ?? 0) === 0 && (args.cell_updates?.length ?? 0) === 0) {
         throw new Error('excel_update needs at least one entry in sheets or cell_updates')
       }
@@ -759,7 +761,7 @@ function registerExcelUpdate(ctx: Context & FsContext): () => void {
         .filter((model): model is SheetModel => model !== undefined)
         .map((model, index) => ({ ...model, part: `worksheets/sheet${index + 1}.xml` }))
       const text = buildXlsxText(orderedModels)
-      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text)
+      const sizeBytes = await saveOfficeText(exec, ctx, target.target, text, writePolicy)
       return {
         path: target.display,
         sizeBytes,

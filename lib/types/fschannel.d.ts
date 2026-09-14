@@ -8,8 +8,12 @@
  * never touches the file system directly: workspace containment, symlink
  * resolution, and atomic publication all belong to the backend, and this
  * module only adds the Office-tool path policy on top (extension allow-lists,
- * size caps, overwrite refusal, display paths).
+ * size caps, overwrite refusal, display paths). Writes carry the per-call
+ * sandbox policy (`resolvePolicy("write", …)` when a controller is mounted)
+ * so sandboxing backends fence them by the session's effective policy rather
+ * than the deployment default.
  */
+import type { Context } from '@deepseek-ai/cordis';
 import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs';
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools';
 /** Cap for text materialized into a single tool result. */
@@ -22,6 +26,22 @@ export declare const MAX_WRITE_CELLS = 200000;
 export interface FsContext {
     fs: FileSystem;
 }
+/**
+ * The per-call sandbox execution policy `ctx.fs.writeText` accepts as its
+ * fifth parameter (`SandboxExecutionPolicy` from `@deepseek-ai/dsh-sandbox`):
+ * a sandboxing backend fences the write by it, the bare backend ignores it,
+ * and omitting it leaves the backend its deployment default — whose writable
+ * roots need not include this session's workspace. Derived from the official
+ * `writeText` signature so the plugin never depends on `@deepseek-ai/dsh-sandbox`
+ * directly.
+ */
+export type OfficeWritePolicy = NonNullable<Parameters<FileSystem['writeText']>[4]>;
+/**
+ * Resolve the per-call write policy, mirroring the official fs tools. Returns
+ * `undefined` when no sandbox-policy controller is mounted (or it predates
+ * `resolvePolicy`), which keeps the bare-backend behavior unchanged.
+ */
+export declare function resolveWritePolicy(ctx: Context, args: unknown, exec: ToolRunContext): Promise<OfficeWritePolicy | undefined>;
 export interface ResolvedOfficePath {
     /** The path exactly as the model passed it. */
     input: string;
@@ -41,8 +61,12 @@ export interface ResolvedOfficePath {
  * @param rawPath - the model-supplied path string.
  * @param allowedExts - acceptable lowercased extensions WITH dots (e.g. `.docx`).
  * @param mustExist - when true, stat the target and refuse anything but a regular file.
+ * @param writePolicy - the per-call write policy, when a sandbox controller is
+ *   mounted; its `workspaceRoot` is the authoritative workspace the write is
+ *   fenced to, so relative paths resolve against it exactly like the official
+ *   fs tools do. Omitted (reads, bare backends) keeps the session cwd.
  */
-export declare function resolveOfficePath(exec: ToolRunContext, ctx: FsContext, rawPath: string, allowedExts: readonly string[], mustExist: boolean): Promise<ResolvedOfficePath>;
+export declare function resolveOfficePath(exec: ToolRunContext, ctx: FsContext, rawPath: string, allowedExts: readonly string[], mustExist: boolean, writePolicy?: OfficeWritePolicy): Promise<ResolvedOfficePath>;
 /**
  * Read a bounded Office file through the backend, observing tool-call
  * cancellation and refusing files above the hard cap before any transfer.
@@ -54,9 +78,11 @@ export declare function readOfficeBytes(exec: ToolRunContext, ctx: FsContext, ta
 /**
  * Publish one generated package: the text is pure ASCII (asserted by the zip
  * planner), so the backend's atomic UTF-8 write lands it on disk
- * byte-identical. Returns the on-disk size.
+ * byte-identical. The per-call write policy rides along as `writeText`'s
+ * fifth parameter so a sandboxing backend fences the write by the session's
+ * effective policy instead of its deployment default. Returns the on-disk size.
  */
-export declare function saveOfficeText(exec: ToolRunContext, ctx: FsContext, target: FsTarget, text: string): Promise<number>;
+export declare function saveOfficeText(exec: ToolRunContext, ctx: FsContext, target: FsTarget, text: string, writePolicy?: OfficeWritePolicy): Promise<number>;
 /**
  * Reject an overwrite when `overwrite` is false and the target already
  * exists. Callers use this BEFORE doing expensive generation so the model
