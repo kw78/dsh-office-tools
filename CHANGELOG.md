@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-09-17
+
+Compatibility-window alignment release, metadata and CI only — no runtime code changes since 1.0.2.
+
+### Changed
+
+- **Peer ranges widened to the 0.1.5 line** (`+ || ^0.1.5-alpha.0` on every `@deepseek-ai/dsh-*` peer): semver's prerelease comparison rules kept `^0.1.2-alpha.0` from matching the platform's current rc line, so every 0.1.5-rc deployment resolved peers as unsatisfied. `dsh.compatibility.dshReleases` and the `dshWorkshop` manifest gain `0.1.5-rc.1` and `0.1.5-rc.2` records — the latest-three store window had lapsed (declared set stopped at 0.1.2-rc.1 while npm `latest` is 0.1.5-rc.1 / `next` 0.1.5-rc.2). Backed by an API-surface diff (writeText's fifth parameter, SandboxedFileSystem's inject/checkedTarget/sandboxMode, SandboxPolicyService.resolve, defineTool/ToolRunContext — all unchanged 0.1.2-rc.1 → 0.1.5-rc.2) and by the real-composition E2E below running green on both lines. The untested 0.1.3-alpha.2 and 0.1.6-alpha.1 stay deliberately outside the ranges and records.
+
+### Added
+
+- **`tests/real-composition.mjs` (`pnpm run test:e2e`)**: the E2E that verified the 1.0.2 fix, now in-repo — boots a genuine cordis context with the real `dsh-session-projection` + `dsh-sandbox-policy` (workspace-write, deployment root elsewhere) + `dsh-fs-sandbox` + `dsh-tools` and drives all eight tools through the real write fence against the built artifact. Two new CI jobs: `real-composition` (pinned devDependency line, blocking) and `compat-next` (ad-hoc override onto the platform's `next` dist-tag, `continue-on-error` tripwire). This closes the gap that let the 1.0.2 bug through: cross-package API drift is now caught by CI, not only by doubles.
+
 ## [1.0.2] - 2026-09-14
 
 ### Fixed

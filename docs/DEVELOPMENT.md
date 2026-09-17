@@ -163,9 +163,9 @@ DSH 是 Cordis 插件内核：
 | 项 | 状态 |
 |---|---|
 | GitHub | <https://github.com/kw78/dsh-office-tools> |
-| npm | `dsh-office-tools@0.2.0`；0.3.0–0.5.0 滞留 GitHub 未发 npm（手工发布缺口），0.6.0 起由 `publish.yml` 自动发布（Release 触发 + provenance），跨版本内容见 CHANGELOG |
+| npm | 0.6.0 起由 `publish.yml` 自动发布（tag/Release 触发 + provenance）；1.0.2 起补齐仓库 `NPM_TOKEN` secret 后链路畅通（此前 v1.0.1 曾因缺 secret 发布失败未察觉），跨版本内容见 CHANGELOG |
 | topics | `dsh`, `dsh-plugin`, `deepseek-harness`, `office` 等 |
-| CI | GitHub Actions `pnpm run check`，node 20/22 矩阵（0.6.0），全绿 |
+| CI | `pnpm run check` node 20/22 矩阵 + `real-composition`（真实包组合 E2E，阻塞）+ `compat-next`（`next` 线前瞻，非阻塞），全绿 |
 | tag | `v0.1.0` ~ `v0.5.0` |
 | awesome-dsh-plugin | PR #405 已合并 |
 | dsh-market | 随 awesome 列表同步 |

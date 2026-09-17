@@ -28,3 +28,43 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
+
+  # Real-package composition E2E: boots a genuine cordis context from the
+  # devDependency line (sandbox-policy + fs-sandbox + tools) and drives all
+  # eight tools through the real write fence. The vitest doubles cannot catch
+  # cross-package API drift (that is exactly how the 1.0.2 sandboxPolicy bug
+  # slipped through) — this job can.
+  real-composition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run test:e2e
+
+  # Forward-compatibility tripwire: the same E2E against the platform's
+  # `next` dist-tag (ad-hoc override; lockfile changes are NOT committed —
+  # this job only verifies compatibility ahead of a release).
+  compat-next:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile --registry https://registry.npmjs.org
+      - run: >-
+          pnpm add -D @deepseek-ai/dsh-fs@next @deepseek-ai/dsh-fs-sandbox@next
+          @deepseek-ai/dsh-sandbox@next @deepseek-ai/dsh-sandbox-policy@next
+          @deepseek-ai/dsh-session-projection@next @deepseek-ai/dsh-tools@next
+          --registry https://registry.npmjs.org
+      - run: pnpm run build
+      - run: pnpm run test:e2e
