@@ -40,7 +40,7 @@ Restart DSH after installing. Requires a profile that provides the `fs` service 
 
 - All paths are confined to the session workspace; `overwrite` defaults to `false`.
 - Reads accept any real package (STORE/DEFLATE) with zip-bomb guards; updates refuse packages with binary parts instead of corrupting them.
-- PPT images are linked, not embedded — keep image files next to the deck when moving it.
+- PPT images are **linked, not embedded**: the sanctioned `ctx.fs` write channel is UTF-8 text only, so a package cannot carry binary image parts. Keep image files next to the deck when moving it, and note that PowerPoint blocks external content by default — a linked picture renders as a "blocked automatic download" placeholder until you enable external content (File → Info → Enable Content, or add the folder under Trust Center → Trusted Locations). This is a PowerPoint security policy, not a package defect.
 - `ppt_create` echoes every element's landing position; `ppt_read` returns the same geometry for any deck.
 
 ## Configuration

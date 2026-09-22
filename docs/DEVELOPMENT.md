@@ -117,7 +117,7 @@ DSH 是 Cordis 插件内核：
 
 ### 4.11 peer 依赖范围与发布工程（0.6.0）
 
-- `@deepseek-ai/dsh-*` 的 peer 范围是 `^0.1.0-rc.6 || ^0.1.1-rc.0`。单写 `^0.1.0-rc.6` 时 node-semver 实测**不满足**运行时 0.1.1-rc.2（semver 规定预发布版本只能满足与其 [major.minor.patch] 元组相同的比较器），声明与宿主脱节；并集恰好覆盖 npm 上全部 0.1.x 稳定版与 rc、排除 0.1.2-alpha/0.2.0。0.1.2-rc 出现时按同法追加 `|| ^0.1.2-rc.0`；0.2.0 属破坏性变更，需另行评估。`cordis` 维持 `^4.0.1`（覆盖运行时 4.0.2）。
+- `@deepseek-ai/dsh-*` 的 peer 范围是 `^0.1.0-rc.6 || ^0.1.1-rc.0 || ^0.1.2-alpha.0 || ^0.1.5-alpha.0`（1.0.3 起按同法继续并集扩展）。单写 `^0.1.0-rc.6` 时 node-semver 实测**不满足**运行时 0.1.1-rc.2（semver 规定预发布版本只能满足与其 [major.minor.patch] 元组相同的比较器），声明与宿主脱节；并集覆盖 npm 上已实际部署的 0.1.x rc/alpha 线，并排除 0.2.0。0.2.0 属破坏性变更，需另行评估。`cordis` 维持 `^4.0.1`（覆盖运行时 4.0.2）。
 - devDependencies 经该范围解析到 0.1.1-rc.2，与 DSH 运行时同版本；`pnpm peers check` 对传递性 dsh peer（dsh-invariants 等）的 warning 是开发环境噪音——运行时由 DSH 完整提供同线版本，测试/typecheck 全绿即验证。
 - 发布自动化：`.github/workflows/publish.yml` 由 GitHub Release（`published`）触发，先完整 `pnpm run check`，再 `npm publish --provenance`（OIDC `id-token: write`）；tag 非 `v*` 或与 `package.json` 版本不一致直接拒绝。CI（`ci.yml`）为 node 20/22 矩阵，对齐 `engines >= 20`。
 
@@ -133,8 +133,8 @@ DSH 是 Cordis 插件内核：
 
 - 背景（DSH Store #334 的后续三轮复检）：`source-verified` 条目的更新必须通过**完整**自动低风险策略——零 reason。字节上限 0.6.0 已过，剩余三个阻断是：`runtime or optional dependencies require a separate supply-chain review`（运行时依赖）、`runtime source contains the files permission signal`（`node:fs` 导入或 `readFile/writeFile/...(` 调用名）、`runtime source contains the commands permission signal`（`child_process` 导入或 `exec/spawn/...(`——**注意 `RegExp.prototype.exec(` 也会命中**，0.6.x 的正则用法即因此被判信号）。另有最新三版兼容窗口要求逐版本精确 `compatible` 声明。
 - 官方通道：`@deepseek-ai/dsh-fs` 提供 `ctx.fs`（resolve/contains/stat/readBytes/writeText…）。读走 `readBytes`（二进制无碍）；写只有 UTF-8 `writeText`——这是硬约束，也是 1.0.0 全部架构的出发点。
-- ASCII-safe STORE zip：生成的包每个字节 <=0x7F。槽位对齐规划器（`src/asciizip.ts`）把每个本地头放在 1 KiB 对齐处并跳过每 64 KiB 页的 `0x8000..0xBFFF` 偏移带（该带内偏移的字节永远不安全），部件内容用 XML 根元素后的合法尾随换行做填充重试，直至 CRC/大小字段全部字节安全；CD 大小用末条目注释 + CD extra 双自由度导向。曾尝试贪心 + 一级前瞻与 DFS 回溯，均会被"基址低字节 0x80 的进位互补"类死锁卡住或爆炸——槽位对齐让"下一偏移"与"本长度"彻底解耦，贪心一遍即成。
-- 图片=链接（`a:blip r:link` + TargetMode=External）：包内零二进制字节，模型保留全部摆放自由度；PNG/JPG/GIF 头部嗅探（`src/imgsize.ts`）提供原图尺寸默认值；cover 用 `a:srcRect` 百分比裁剪。
+- ASCII-safe STORE zip：生成的包每个字节 <=0x7F。连续式规划器（`src/asciizip.ts`）把条目首尾相接铺开、不留任何间隙——Microsoft Office 的 OPC 读取器不接受带间隙的包，而 Python `zipfile` 会容忍，所以旧的全绿测试也漏检（issue #5）：部件内容用 XML 根元素后的合法尾随换行填充，直至该条目的长度与 CRC-32 全部字节安全；下一偏移由一个小型合法 local extra field（id 0、总长 4..127）微调，绕开"长度低字节与下一偏移低字节在 0x80 处互补"的死锁；因偏移不再对齐槽位，落入每 64 KiB 页不安全带（偏移字节 >0x7F）的部件会被填充越过该带。CD 大小用末条目注释 + 合法 CD extra 双自由度导向。
+- 图片=链接（`a:blip r:link` + TargetMode=External）：包内零二进制字节，模型保留全部摆放自由度；PNG/JPG/GIF 头部嗅探（`src/imgsize.ts`）提供原图尺寸默认值；cover 用 `a:srcRect` 百分比裁剪。注意：PowerPoint 默认阻止外部内容，链接图片渲染为"已阻止自动下载此图片"占位符，需用户启用外部内容或把目录加入信任中心可信位置——这是 PowerPoint 的安全策略，非包结构缺陷；内嵌图片在 `writeText` 纯文本通道下不可能实现。
 - 读取兼容性：自研 zip 读取器解析 EOCD/CD，本地头按自身 nameLen/extraLen 定位切片，STORE 直读、DEFLATE 走 `node:zlib` 且以声明尺寸为膨胀上限——原 zip 炸弹守卫语义完整保留（条目/总量/条目数三预算 + DOCTYPE/ENTITY 拒绝 + 伪 zip 友好报错）。
 - 本地门禁复检：`tests/store-gate-replica.mjs` 逐字复刻商店 `analyzeFixedSource` + `permissionSignals` 正则与全部边界，对工作树运行；1.0.0 固定源输出零 reason、零信号。兼容声明全部有实测：0.1.1-rc.2 / 0.1.2-alpha.4 / alpha.5 / rc.1 四条线的 `@deepseek-ai/*` devDeps 下 51/51 全绿。更新流程用商店自己的 `catalog-update-review.mjs` + `catalog-compatibility-policy.mjs` 模块本地仿真：`newer-version → 身份一致 → 更新写入 → 恢复 approved、清除下架原因、删除 managed candidate`。
 

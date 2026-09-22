@@ -21,8 +21,9 @@
  *   pnpm run test:e2e
  */
 
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { env, platform } from 'node:process'
 import { Context } from '@deepseek-ai/cordis'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
@@ -30,11 +31,15 @@ import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
 import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { apply } from '../lib/index.js'
 
-// Both roots must sit OUTSIDE /tmp and os.tmpdir(): workspace-write's writable
-// set includes the platform temp area, so a session workspace under /tmp would
-// be writable even under the deployment-default policy and this run could not
-// distinguish per-call fencing from the temp-area escape hatch.
-const scratch = '/var/tmp'
+// Both roots must sit OUTSIDE the platform temp area (`os.tmpdir()`, `/tmp`):
+// workspace-write's writable set includes it, so a session workspace under the
+// temp area would be writable even under the deployment-default policy and this
+// run could not distinguish per-call fencing from the temp-area escape hatch.
+// `/var/tmp` keeps that property on POSIX; Windows defaults to a sibling of the
+// system root (`C:\dsh-rc`), overridable with DSH_RC_SCRATCH.
+const scratch = env.DSH_RC_SCRATCH
+  ?? (platform === 'win32' ? `${env.SystemDrive ?? 'C:'}\\dsh-rc` : '/var/tmp')
+await mkdir(scratch, { recursive: true })
 const deployRoot = await mkdtemp(join(scratch, 'dsh-rc-deploy-'))
 const sessionRoot = await mkdtemp(join(scratch, 'dsh-rc-session-'))
 

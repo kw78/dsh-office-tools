@@ -2,13 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.0.4] - 2026-09-22
 
 ### Fixed
 
 - **Generated `.docx`/`.xlsx`/`.pptx` files were rejected by real Microsoft Office** (field report #5 against 1.0.3): the ASCII-safe STORE planner placed every local header on a 1 KiB slot and filled the gaps between entries with inert NUL bytes. Python's `zipfile` — and therefore the test suite — locates entries through the central directory and tolerated the gaps, but Office's OPC reader walks the archive expecting contiguous entries and reported "the file may be corrupted" (Word), "cannot get the `Open` property of the `Workbooks` class" (Excel) and `HRESULT E_FAIL` (PowerPoint). Entries are now laid out back to back: each part is padded with trailing newlines (legal after the XML root) until its size and CRC-32 are field-safe, and a small valid local extra field shifts the next offset when padding alone cannot (the size and offset low bytes couple at 0x80). Offsets drift instead of aligning to slots, so a part whose natural end falls in a page's unsafe `0x8000..0xFFFF` band is padded past it. `tests/demo-trio.spec.ts` now walks each generated package header by header and asserts there are no gaps.
 - **`ppt_create` wrote PowerPoint parts that real PowerPoint rejected** even once the container was contiguous: the theme's two style-matrix `a:gradFill` entries carried a single gradient stop (the schema requires at least two), `[Content_Types].xml` declared `notesSlide1.xml`..`notesSlideN.xml` by notes count while the parts were named after the slide that carried the notes, and a linked image's relationship target kept Windows backslashes (an absolute path on Windows) instead of a portable forward-slash relative path. Word and Excel accepted the decks after the container fix alone; PowerPoint needed all three. Verified against Microsoft Office 16.0 COM (`Word.Application` / `Excel.Application` / `PowerPoint.Application`).
 - **`ppt_create` refused every linked image larger than 4 KiB** (field report #4 against 1.0.2): `placeImage` called `ctx.fs.readBytes(target, signal, 4096)` — whose contract throws when the file exceeds the cap — just to sniff the first 1 KiB. The cap is now the file's real size (already bounded by the 20 MiB linked-image limit), so ordinary PNG/JPEG/GIF images link normally.
+- **`tests/real-composition.mjs` could only run on POSIX**: its scratch roots were hardcoded to `/var/tmp`, so `pnpm run test:e2e` failed with `ENOENT` on Windows. It now uses `/var/tmp` on POSIX and `%SystemDrive%\dsh-rc` on Windows (override with `DSH_RC_SCRATCH`), creating the directory first.
+
+### Documentation
+
+- Both READMEs now state that PPT images are **linked, not embedded** because the `ctx.fs` write channel is UTF-8 text only, and that PowerPoint blocks external content by default — a linked picture shows a "blocked automatic download" placeholder until the user enables external content or adds the folder to Trusted Locations. `docs/DEVELOPMENT.md` §4.13 now describes the contiguous planner that replaced slot alignment, and §4.11 reflects the current peer ranges.
 
 ## [1.0.3] - 2026-09-17
 

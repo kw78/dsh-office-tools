@@ -40,7 +40,7 @@ dsh plugin --profile web add github:kw78/dsh-office-tools  # 源码
 
 - 所有路径限制在会话工作目录内；`overwrite` 默认 `false`。
 - 读取接受任意真实包（STORE/DEFLATE），带 zip 炸弹防御；更新遇到含二进制部件的包会明确拒绝而非损坏它。
-- PPT 图片为链接式（非内嵌）——移动 deck 时请连同图片文件。
+- PPT 图片为**链接式**（非内嵌）：官方 `ctx.fs` 写入通道只支持 UTF-8 文本，包内无法携带二进制图片部件。移动 deck 时请连同图片文件；另注意 PowerPoint 默认阻止外部内容——链接图片会显示为"已阻止自动下载此图片"占位符，需手动启用外部内容（文件 → 信息 → 启用内容，或把目录加入信任中心的可信位置）后才会显示。这是 PowerPoint 的安全策略，不是包结构缺陷。
 - `ppt_create` 回显每个元素的落点坐标；`ppt_read` 对任意 deck 返回同样的几何信息。
 
 ## 配置
