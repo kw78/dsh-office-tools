@@ -64,36 +64,13 @@ function crc32(bytes: Uint8Array): number {
   return (state ^ 0xffffffff) >>> 0
 }
 
-/**
- * Rolling CRC state of a content string plus `padCount` trailing newlines:
- * fold the content once, then step one newline byte per pad. This keeps the
- * planner's retry loops O(limit) overall instead of O(limit^2).
- */
-function rollingCrc(content: string, padCount: number): number {
-  let state = 0xffffffff
-  for (let index = 0; index < content.length; index += 1) {
-    state = crcFold(state, content.charCodeAt(index))
-  }
-  for (let count = 0; count < padCount; count += 1) {
-    state = crcFold(state, 0x0a)
-  }
-  return (state ^ 0xffffffff) >>> 0
-}
-
+/** Mid-scan CRC state after folding a whole content string once. */
 function contentCrcState(content: string): number {
   let state = 0xffffffff
   for (let index = 0; index < content.length; index += 1) {
     state = crcFold(state, content.charCodeAt(index))
   }
   return state
-}
-
-/** Fold one more newline onto a mid-scan state and finalize. */
-function crcAfterPad(state: number, padCount: number): number {
-  for (let count = 0; count < padCount; count += 1) {
-    state = crcFold(state, 0x0a)
-  }
-  return (state ^ 0xffffffff) >>> 0
 }
 
 /** ASCII-safe = every byte at most 0x7F, so UTF-8 encoding is the identity. */
@@ -159,75 +136,46 @@ interface PlannedArchive {
   directoryOffset: number
 }
 
-/** A content string padded for the planner; length is its byte size. */
-function padded(content: string, pad: number): string {
-  return pad === 0 ? content : content + '\n'.repeat(pad)
-}
-
-/** Retry ceiling per entry: band crossings (see below) can need ~18 KiB. */
+/** Retry ceiling per entry: crossing an unsafe offset band can need ~32 KiB. */
 const MAX_PLAN_PAD = 0x10000
 
+/** Total byte length of one valid, ignorable extra field carrying `total` bytes. */
+function extraField(total: number): string {
+  if (total === 0) return ''
+  return u16(0) + u16(total - 4) + '\x00'.repeat(total - 4)
+}
+
 /**
- * One (extraLength, pad) pair that keeps an entry's own fields ASCII-safe:
- * the padded content's length and CRC-32, plus the NEXT entry's offset the
- * pair produces. `extraLength` bytes of local-header extra give the planner
- * base-byte freedom that padding alone cannot express (the size and offset
- * byte windows couple at base low byte 0x80 into an unsolvable pair).
- * Offsets inside the 0x8000..0xBFFF band of every 64 KiB page are never
- * field-safe, so packages pad PAST the band — hence the generous pad ceiling.
+ * Smallest extra-field length that lands `end` on a field-safe offset: zero
+ * when `end` is already safe, otherwise the first valid extra record
+ * (4..127 bytes) whose bytes shift the next local header back into range.
+ * Only valid records: a bare padding run would be a malformed extra field,
+ * which strict OPC readers reject.
  */
-function feasiblePlacement(content: string, offset: number, nameLength: number, maxExtra: number): { extraLength: number; pad: number } | undefined {
-  if (!safeField(offset)) return undefined
-  const baseLength = content.length
-  const rootState = contentCrcState(content)
-  for (let extraLength = 0; extraLength <= maxExtra; extraLength += 1) {
-    let state = rootState
-    const headerSize = LOCAL_HEADER_BYTES + nameLength + extraLength
-    for (let pad = 0; pad <= MAX_PLAN_PAD; pad += 1) {
-      if (pad > 0) state = crcFold(state, 0x0a)
-      const length = baseLength + pad
-      if (!safeField(length)) continue
-      if (!safeField((state ^ 0xffffffff) >>> 0)) continue
-      if (!safeField(offset + headerSize + length)) continue
-      return { extraLength, pad }
-    }
+function feasibleExtraLength(end: number): number | undefined {
+  if (safeField(end)) return 0
+  for (let total = 4; total <= 0x7f; total += 1) {
+    if (safeField(end + total)) return total
   }
   return undefined
 }
 
 /**
- * Plan the padding of every part so that each entry's CRC-32, compressed
- * (stored) size, local-header offset, the central-directory size, and the
- * central-directory offset are all ASCII-safe field values. Trailing
- * newlines after the XML root element keep the content valid XML while
- * giving the planner retry freedom; the final central-directory entry's
- * comment steers the directory size. Every choice is committed only after
- * the next part is confirmed feasible at the resulting offset.
- */
-/**
- * Slot-aligned ASCII-safe planner.
+ * Contiguous ASCII-safe planner.
  *
- * Every local header sits at a multiple of SLOT_BYTES (1 KiB), and the
- * 0x8000..0xBFFF band of every 64 KiB page — whose offsets can never be
- * field-safe — is skipped by jumping to the next page. Offsets are therefore
- * safe BY CONSTRUCTION: byte 0 is always 0x00 (alignment) and byte 1 is a
- * multiple of 4 below 0x80 (band skipping). With the next offset decoupled
- * from this entry's length, a simple greedy pass suffices: pad each part
- * with trailing newlines (legal after the XML root) until its own length
- * and CRC-32 are field-safe, growing the entry's slot count when the pad
- * budget runs out. Gaps between entries are inert bytes; readers locate
- * local headers through the central directory, exactly how every OOXML
- * consumer works.
+ * Entries are laid out back to back with NO gaps: each local header starts
+ * exactly where the previous entry's data ends, because Microsoft Office's
+ * OPC reader refuses a package whose local entries are not contiguous (the
+ * old slot-alignment design wrote inert NUL gaps that Python's zipfile
+ * tolerated but Word/Excel/PowerPoint rejected). Every zip field must still
+ * be ASCII-safe so the archive can travel through the UTF-8 text channel:
+ * each part is padded with trailing newlines (legal after the XML root)
+ * until its size and CRC-32 are field-safe, and a small valid local extra
+ * field shifts the NEXT entry's offset when padding alone cannot (the size
+ * and offset low bytes couple at 0x80). Offsets drift through the archive
+ * rather than onto 1 KiB slots, so the planner pads PAST an unsafe
+ * 0x8000..0xFFFF page band whenever a part's natural end falls inside one.
  */
-const SLOT_BYTES = 0x400
-
-/** Round an aligned offset up past the unsafe 0x8000..0xBFFF band of its page. */
-function skipUnsafeBand(offset: number): number {
-  const high = (offset >>> 8) & 0xff
-  if (high < 0x80 || high > 0xbf) return offset
-  return (offset | 0xffff) + 1
-}
-
 function planEntries(parts: ZipPart[]): PlannedArchive {
   const planned: PlannedEntry[] = []
   let offset = 0
@@ -236,27 +184,19 @@ function planEntries(parts: ZipPart[]): PlannedArchive {
     const nameLength = part.name.length
     const headerSize = LOCAL_HEADER_BYTES + nameLength
     const baseLength = part.content.length
-    let slots = Math.max(1, Math.ceil((headerSize + baseLength) / SLOT_BYTES))
-    let chosen: { content: string; crc: number } | undefined
-    let entryNext = 0
-    for (let growth = 0; growth < 512 && chosen === undefined; growth += 1) {
-      const budget = slots * SLOT_BYTES - headerSize - baseLength
-      if (budget < 0) {
-        slots += 1
-        continue
-      }
-      let state = contentCrcState(part.content)
-      for (let pad = 0; pad <= budget; pad += 1) {
-        if (pad > 0) state = crcFold(state, 0x0a)
-        const length = baseLength + pad
-        if (!safeField(length)) continue
-        if (!safeField((state ^ 0xffffffff) >>> 0)) continue
-        const content = pad === 0 ? part.content : part.content + '\n'.repeat(pad)
-        chosen = { content, crc: (state ^ 0xffffffff) >>> 0 }
-        entryNext = skipUnsafeBand(offset + slots * SLOT_BYTES)
-        break
-      }
-      if (chosen === undefined) slots += 1
+    const minEnd = offset + headerSize + baseLength
+    let chosen: { content: string; crc: number; extraLength: number; end: number } | undefined
+    let state = contentCrcState(part.content)
+    for (let pad = 0; pad <= MAX_PLAN_PAD && chosen === undefined; pad += 1) {
+      if (pad > 0) state = crcFold(state, 0x0a)
+      const length = baseLength + pad
+      if (!safeField(length)) continue
+      const crc = (state ^ 0xffffffff) >>> 0
+      if (!safeField(crc)) continue
+      const extraLength = feasibleExtraLength(minEnd + pad)
+      if (extraLength === undefined) continue
+      const content = pad === 0 ? part.content : part.content + '\n'.repeat(pad)
+      chosen = { content, crc, extraLength, end: minEnd + pad + extraLength }
     }
     if (chosen === undefined) {
       throw new Error(`cannot lay out an ASCII-safe zip entry for "${part.name}" (offset=${offset})`)
@@ -266,29 +206,31 @@ function planEntries(parts: ZipPart[]): PlannedArchive {
       content: chosen.content,
       crc: chosen.crc,
       offset,
-      localExtraLength: 0,
+      localExtraLength: chosen.extraLength,
       commentLength: 0,
       centralExtraLength: 0,
     })
-    offset = entryNext
+    offset = chosen.end
   }
-  // Steer the central-directory size with the last entry's comment (and,
-  // when the comment byte alone cannot reach a safe value — the classic
-  // 0x80 low byte — with a bounded central extra extra field) so the EOCD's
-  // directory-size field and the steering fields themselves stay safe.
+  // Steer the central-directory size with the last entry's comment (plus,
+  // only when the comment byte alone cannot reach a safe value, a bounded
+  // valid central extra field) so the EOCD's directory-size field and the
+  // steering fields themselves stay ASCII-safe.
   const baseDirectorySize = planned.reduce((sum, entry) => sum + CENTRAL_HEADER_BYTES + entry.name.length, 0)
+  const extraCandidates = [0]
+  for (let total = 4; total <= 0x7f; total += 1) extraCandidates.push(total)
   let commentLength = -1
-  let centralExtraLength = 0
-  for (; centralExtraLength <= 0x7f; centralExtraLength += 1) {
-    commentLength = 0
-    while (commentLength <= 0x7f) {
-      if (safeField(baseDirectorySize + centralExtraLength + commentLength)) break
-      commentLength += 1
+  let centralExtraLength = -1
+  outer: for (const extra of extraCandidates) {
+    for (let comment = 0; comment <= 0x7f; comment += 1) {
+      if (safeField(baseDirectorySize + extra + comment)) {
+        centralExtraLength = extra
+        commentLength = comment
+        break outer
+      }
     }
-    if (commentLength <= 0x7f) break
   }
-  if (centralExtraLength > 0x7f || commentLength > 0x7f
-    || !safeField(baseDirectorySize + centralExtraLength + commentLength)) {
+  if (commentLength < 0 || centralExtraLength < 0) {
     throw new Error('cannot lay out an ASCII-safe central directory size')
   }
   if (planned.length > 0) {
@@ -315,31 +257,36 @@ export function buildAsciiZip(parts: ZipPart[]): string {
   for (const entry of planned) {
     const nameLength = entry.name.length
     const length = entry.content.length
-    // Gap-fill to the planned slot offset so real offsets match the plan;
-    // readers locate local headers through the central directory.
-    if (entry.offset > cursor) local.push('\x00'.repeat(entry.offset - cursor))
+    // Entries are contiguous: a local header starts exactly where the
+    // previous entry's data ended, with no inert gap bytes. Office's OPC
+    // reader walks the archive end to end and refuses packages with gaps.
+    if (entry.offset !== cursor) {
+      throw new Error(`internal error: zip entry "${entry.name}" is not contiguous (planned ${entry.offset}, actual ${cursor})`)
+    }
     local.push(
       'PK\x03\x04', u16(20), u16(0), u16(0), u16(DOS_TIME), u16(DOS_DATE),
       u32(entry.crc), u32(length), u32(length), u16(nameLength), u16(entry.localExtraLength),
-      entry.name, '\x00'.repeat(entry.localExtraLength), entry.content,
+      entry.name, extraField(entry.localExtraLength), entry.content,
     )
     central.push(
       'PK\x01\x02', u16(20), u16(20), u16(0), u16(0), u16(DOS_TIME), u16(DOS_DATE),
       u32(entry.crc), u32(length), u32(length), u16(nameLength), u16(entry.centralExtraLength),
       u16(entry.commentLength), u16(0), u16(0), u32(0), u32(entry.offset),
-      entry.name, '\x00'.repeat(entry.centralExtraLength), 'd'.repeat(entry.commentLength),
+      entry.name, extraField(entry.centralExtraLength), 'd'.repeat(entry.commentLength),
     )
     cursor = entry.offset + LOCAL_HEADER_BYTES + nameLength + entry.localExtraLength + length
   }
   const directorySize = central.reduce((sum, chunk) => sum + chunk.length, 0)
   const directoryOffset = plan.directoryOffset
+  if (directoryOffset !== cursor) {
+    throw new Error(`internal error: the central directory does not follow the last entry (planned ${directoryOffset}, actual ${cursor})`)
+  }
   if (!safeField(directorySize) || !safeField(directoryOffset)) {
     throw new Error('internal error: the planned central directory fields are not ASCII-safe')
   }
-  const directoryGap = directoryOffset > cursor ? '\x00'.repeat(directoryOffset - cursor) : ''
   const eocd = ['PK\x05\x06', u16(0), u16(0), u16(planned.length), u16(planned.length),
     u32(directorySize), u32(directoryOffset), u16(0)].join('')
-  const output = [...local, directoryGap, central.join(''), eocd].join('')
+  const output = [...local, central.join(''), eocd].join('')
   assertAscii(output, 'zip output')
   return output
 }

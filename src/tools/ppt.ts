@@ -184,8 +184,8 @@ const THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
   + '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>'
   + '<a:fmtScheme name="Office">'
   + '<a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'
-  + '<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:lumMod val="110000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>'
-  + '<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:lumMod val="105000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>'
+  + '<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:lumMod val="110000"/><a:satMod val="105000"/><a:tint val="67000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"><a:lumMod val="105000"/><a:satMod val="109000"/><a:tint val="81000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>'
+  + '<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:satMod val="103000"/><a:lumMod val="102000"/><a:tint val="94000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"><a:lumMod val="99000"/><a:satMod val="120000"/><a:shade val="78000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>'
   + '</a:fillStyleLst>'
   + '<a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>'
   + '<a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>'
@@ -215,11 +215,11 @@ const NOTES_MASTER_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?
   + '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>'
   + '</p:notesMaster>'
 
-function contentTypesXml(slideCount: number, notesCount: number): string {
+function contentTypesXml(slideCount: number, notesNumbers: number[]): string {
   const slides = Array.from({ length: slideCount }, (_, index) =>
     `<Override PartName="/ppt/slides/slide${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')
-  const notes = Array.from({ length: notesCount }, (_, index) =>
-    `<Override PartName="/ppt/notesSlides/notesSlide${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>`).join('')
+  const notes = notesNumbers.map(number =>
+    `<Override PartName="/ppt/notesSlides/notesSlide${number}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>`).join('')
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + `<Types ${CT_NS}>`
     + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
@@ -349,13 +349,15 @@ function validateSlideSpecs(slides: SlideSpec[]): void {
  * otherwise the absolute path with forward slashes.
  */
 function imageLinkTarget(deck: ResolvedOfficePath, image: ResolvedOfficePath): string {
-  const deckParts = deck.absolute.split('/').filter(Boolean).slice(0, -1)
-  const imageParts = image.absolute.split('/').filter(Boolean)
+  const deckPath = deck.absolute.replace(/\\/g, '/')
+  const imagePath = image.absolute.replace(/\\/g, '/')
+  const deckParts = deckPath.split('/').filter(Boolean).slice(0, -1)
+  const imageParts = imagePath.split('/').filter(Boolean)
   let common = 0
   while (common < deckParts.length && common < imageParts.length - 1 && deckParts[common] === imageParts[common]) common += 1
   const up = deckParts.length - common
   const relative = [...Array.from({ length: up }, () => '..'), ...imageParts.slice(common)].join('/')
-  return relative.startsWith('../') || relative === '' ? image.absolute : relative
+  return relative.startsWith('../') || relative === '' ? imagePath : relative
 }
 
 /**
@@ -370,7 +372,10 @@ async function placeImage(exec: ToolRunContext, ctx: FsContext, deck: ResolvedOf
   if (info !== undefined && (info.size ?? 0) > MAX_IMAGE_BYTES) {
     throw new Error(`slide ${slideIndex + 1} image ${imageIndex + 1} "${image.path}" is ${info.size} bytes; maximum linked image size is ${MAX_IMAGE_BYTES} bytes`)
   }
-  const head = await ctx.fs.readBytes(resolved.target, exec.signal, 4096)
+  // readBytes rejects any file larger than its cap, and sniffImageSize only
+  // needs the first 1 KiB; cap at the real file size so ordinary images
+  // (always well above 4 KiB) are not rejected before sniffing.
+  const head = await ctx.fs.readBytes(resolved.target, exec.signal, Math.max(1024, info?.size ?? 0))
   const intrinsic = sniffImageSize(head.subarray(0, Math.min(head.byteLength, 1024)))
 
   const target = imageLinkTarget(deck, resolved)
@@ -534,10 +539,12 @@ export async function buildPptxText(
     }
   }
 
-  const notesCount = builds.filter(build => build.spec.notes !== undefined && build.spec.notes.trim() !== '').length
+  const notesNumbers = builds
+    .map((build, index) => (build.spec.notes !== undefined && build.spec.notes.trim() !== '' ? index + 1 : 0))
+    .filter(number => number > 0)
   const layout: Array<{ index: number; elements: SlideElementBox[] }> = []
   const parts: ZipPart[] = [
-    { name: '[Content_Types].xml', content: contentTypesXml(slideCount, notesCount) },
+    { name: '[Content_Types].xml', content: contentTypesXml(slideCount, notesNumbers) },
     { name: '_rels/.rels', content: ROOT_RELS_XML },
     { name: 'ppt/presentation.xml', content: presentationXml(slideCount) },
     { name: 'ppt/_rels/presentation.xml.rels', content: presentationRelsXml(slideCount) },

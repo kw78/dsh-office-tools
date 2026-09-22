@@ -13,6 +13,34 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { mountTools, run } from './harness.ts'
 
+/**
+ * Walk the local file headers end to end and assert the package is
+ * contiguous: each local header starts exactly where the previous entry's
+ * data ended, and the central directory follows the last entry with no gap.
+ * Microsoft Office's OPC reader refuses gapped packages even though Python's
+ * zipfile (and node:zlib) tolerate them, so the earlier slot-alignment writer
+ * shipped files that no real Office would open.
+ */
+function assertContiguousPackage(bytes: Uint8Array): void {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const local = (offset: number): boolean => bytes[offset] === 0x50 && bytes[offset + 1] === 0x4b
+    && bytes[offset + 2] === 0x03 && bytes[offset + 3] === 0x04
+  const central = (offset: number): boolean => bytes[offset] === 0x50 && bytes[offset + 1] === 0x4b
+    && bytes[offset + 2] === 0x01 && bytes[offset + 3] === 0x02
+  let cursor = 0
+  let entries = 0
+  while (cursor + 30 <= bytes.length && local(cursor)) {
+    const nameLength = view.getUint16(cursor + 26, true)
+    const extraLength = view.getUint16(cursor + 28, true)
+    const compressedSize = view.getUint32(cursor + 18, true)
+    cursor += 30 + nameLength + extraLength + compressedSize
+    entries += 1
+  }
+  expect(entries).toBeGreaterThan(0)
+  expect(cursor + 4).toBeLessThanOrEqual(bytes.length)
+  expect(central(cursor)).toBe(true)
+}
+
 describe('quarterly-report trio (README demo)', () => {
   test('one session: create report.docx + budget.xlsx + deck.pptx, read all three back', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-office-trio-'))
@@ -83,10 +111,11 @@ describe('quarterly-report trio (README demo)', () => {
         ],
       }, root)
 
-      // All three artifacts are real zip/OOXML files.
+      // All three artifacts are real, contiguous zip/OOXML files.
       for (const file of ['report.docx', 'budget.xlsx', 'deck.pptx']) {
-        const head = (await readFile(join(root, file))).subarray(0, 2).toString('latin1')
-        expect(head).toBe('PK')
+        const bytes = await readFile(join(root, file))
+        expect(bytes.subarray(0, 2).toString('latin1')).toBe('PK')
+        assertContiguousPackage(bytes)
       }
 
       const word = await run(tools, 'word_read', { path: 'report.docx', format: 'markdown' }, root) as {

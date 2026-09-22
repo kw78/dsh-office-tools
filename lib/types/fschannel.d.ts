@@ -9,9 +9,9 @@
  * resolution, and atomic publication all belong to the backend, and this
  * module only adds the Office-tool path policy on top (extension allow-lists,
  * size caps, overwrite refusal, display paths). Writes carry the per-call
- * sandbox policy (`resolvePolicy("write", …)` when a controller is mounted)
- * so sandboxing backends fence them by the session's effective policy rather
- * than the deployment default.
+ * sandbox policy (`ctx.sandboxPolicy.resolve({ session })` when a confining
+ * backend is mounted) so sandboxing backends fence them by the session's
+ * effective policy rather than the deployment default.
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs';
@@ -37,11 +37,11 @@ export interface FsContext {
  */
 export type OfficeWritePolicy = NonNullable<Parameters<FileSystem['writeText']>[4]>;
 /**
- * Resolve the per-call write policy, mirroring the official fs tools. Returns
- * `undefined` when no sandbox-policy controller is mounted (or it predates
- * `resolvePolicy`), which keeps the bare-backend behavior unchanged.
+ * Resolve the per-call write policy the way the official fs tool layer does:
+ * skip when the mounted backend does not confine (`fs.sandboxMode` undefined),
+ * otherwise ask the shared `sandboxPolicy` service for the calling session.
  */
-export declare function resolveWritePolicy(ctx: Context, args: unknown, exec: ToolRunContext): Promise<OfficeWritePolicy | undefined>;
+export declare function resolveWritePolicy(ctx: Context & FsContext, exec: ToolRunContext): Promise<OfficeWritePolicy | undefined>;
 export interface ResolvedOfficePath {
     /** The path exactly as the model passed it. */
     input: string;
