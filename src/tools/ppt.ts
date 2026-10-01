@@ -530,6 +530,7 @@ export async function buildPptxText(
   }
   const slideCount = builds.length
   if (slideCount === 0) throw new Error('ppt_create needs a title or at least one slide')
+  if (slideCount > 200) throw new Error('too many slides including the title slide (maximum 200)')
 
   for (const [slideIndex, build] of builds.entries()) {
     const images = build.spec.images ?? []

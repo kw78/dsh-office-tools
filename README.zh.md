@@ -61,6 +61,8 @@ pnpm install && pnpm run check   # typecheck + tests + build
 pnpm run test:e2e                # 真实组合 E2E（sandbox-policy + fs-sandbox + tools）
 ```
 
-兼容性：DSH `>=0.1.0-rc.6`；逐版本的精确兼容记录见 `package.json`（`dsh.compatibility.dshReleases`）。
+兼容性：声明的 DSH 0.1.x 区间，以及 `>=0.2.0-rc.1 <0.3.0-0`；逐版本的实测记录见 `package.json`（`dsh.compatibility.dshReleases`）。CI 验证 0.1.2-rc.1 和 0.2.0-rc.1，尚未声明支持 DSH 0.3.x。
+
+生成文件最多 50 MiB；PPT 最多 200 页（包含可选封面）。图片仍为外部链接。分层架构与真实图片嵌入的迁移方案见 [架构分析](docs/ARCHITECTURE.zh.md)。
 
 更多文档：[DEVELOPMENT.md](docs/DEVELOPMENT.md) · [ROADMAP.md](docs/ROADMAP.md) · [hub-registration.md](docs/hub-registration.md) · MIT [License](LICENSE)

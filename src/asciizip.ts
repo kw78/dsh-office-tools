@@ -123,7 +123,7 @@ interface PlannedEntry {
   name: string
   content: string
   crc: number
-  /** Slot-aligned, band-skipped local-header offset this entry is emitted at. */
+  /** Contiguous local-header offset. */
   offset: number
   localExtraLength: number
   commentLength: number
@@ -136,8 +136,43 @@ interface PlannedArchive {
   directoryOffset: number
 }
 
-/** Retry ceiling per entry: crossing an unsafe offset band can need ~32 KiB. */
-const MAX_PLAN_PAD = 0x10000
+/** Largest byte-safe 16-bit extra/comment/count field. */
+const MAX_SAFE_U16 = 0x7f7f
+const CRC_SUFFIX_BYTES = 8
+
+/** Jump over an unsafe byte band instead of trying each byte in that band. */
+function nextSafeField(value: number): number {
+  let candidate = value
+  for (let byte = 0; byte < 4; byte += 1) {
+    const unit = 2 ** (8 * byte)
+    if (Math.floor(candidate / unit) % 256 > 0x7f) {
+      const band = unit * 256
+      candidate = (Math.floor(candidate / band) + 1) * band
+    }
+  }
+  if (!safeField(candidate)) throw new Error('ASCII-safe ZIP field exceeds its representable range')
+  return candidate
+}
+
+/**
+ * Eight trailing XML whitespace bytes vary the CRC without changing length.
+ * The space/tab toggles span all four CRC high-bit constraints, so at least
+ * one of these 256 suffixes is byte-safe for every incoming CRC state.
+ */
+function safeCrcSuffix(state: number): { suffix: string; crc: number } {
+  for (let variant = 0; variant < 256; variant += 1) {
+    let folded = state
+    let suffix = ''
+    for (let bit = 0; bit < CRC_SUFFIX_BYTES; bit += 1) {
+      const byte = variant & (1 << bit) ? 0x09 : 0x20
+      suffix += String.fromCharCode(byte)
+      folded = crcFold(folded, byte)
+    }
+    const crc = (folded ^ 0xffffffff) >>> 0
+    if (safeField(crc)) return { suffix, crc }
+  }
+  throw new Error('internal error: trailing XML whitespace cannot produce a byte-safe CRC')
+}
 
 /** Total byte length of one valid, ignorable extra field carrying `total` bytes. */
 function extraField(total: number): string {
@@ -148,14 +183,21 @@ function extraField(total: number): string {
 /**
  * Smallest extra-field length that lands `end` on a field-safe offset: zero
  * when `end` is already safe, otherwise the first valid extra record
- * (4..127 bytes) whose bytes shift the next local header back into range.
+ * (4..0x7F7F bytes, with safe length fields) that reaches a safe offset.
  * Only valid records: a bare padding run would be a malformed extra field,
  * which strict OPC readers reject.
  */
 function feasibleExtraLength(end: number): number | undefined {
   if (safeField(end)) return 0
-  for (let total = 4; total <= 0x7f; total += 1) {
-    if (safeField(end + total)) return total
+  let total = nextSafeField(Math.max(4, nextSafeField(end) - end))
+  while (total <= MAX_SAFE_U16) {
+    if (!safeField(total - 4)) {
+      total = nextSafeField(total + 4)
+      continue
+    }
+    const next = nextSafeField(end + total)
+    if (next === end + total) return total
+    total = nextSafeField(total + next - (end + total))
   }
   return undefined
 }
@@ -169,65 +211,62 @@ function feasibleExtraLength(end: number): number | undefined {
  * old slot-alignment design wrote inert NUL gaps that Python's zipfile
  * tolerated but Word/Excel/PowerPoint rejected). Every zip field must still
  * be ASCII-safe so the archive can travel through the UTF-8 text channel:
- * each part is padded with trailing newlines (legal after the XML root)
- * until its size and CRC-32 are field-safe, and a small valid local extra
- * field shifts the NEXT entry's offset when padding alone cannot (the size
- * and offset low bytes couple at 0x80). Offsets drift through the archive
- * rather than onto 1 KiB slots, so the planner pads PAST an unsafe
- * 0x8000..0xFFFF page band whenever a part's natural end falls inside one.
+ * Choose a safe size and offset first, using legal XML whitespace and a
+ * valid local extra field. Then vary eight trailing space/tab bytes to make
+ * the CRC safe without changing that layout. CRC search no longer competes
+ * with size/offset search. Never insert gaps between entries.
  */
 function planEntries(parts: ZipPart[]): PlannedArchive {
   const planned: PlannedEntry[] = []
   let offset = 0
   for (const part of parts) {
     assertAscii(part.name, 'zip entry name')
+    assertAscii(part.content, 'zip entry content')
     const nameLength = part.name.length
     const headerSize = LOCAL_HEADER_BYTES + nameLength
     const baseLength = part.content.length
-    const minEnd = offset + headerSize + baseLength
-    let chosen: { content: string; crc: number; extraLength: number; end: number } | undefined
+    if (!safeField(nameLength) || nameLength > MAX_SAFE_U16) {
+      throw new Error(`zip entry name is too long or has a non-byte-safe length: "${part.name}"`)
+    }
+    let length = nextSafeField(baseLength + CRC_SUFFIX_BYTES)
+    let extraLength: number | undefined
+    for (;;) {
+      const end = offset + headerSize + length
+      if (end > MAX_OFFICE_FILE_BYTES) throw new Error('generated Office package exceeds the 50 MiB write budget')
+      extraLength = feasibleExtraLength(end)
+      if (extraLength !== undefined) break
+      // A long unsafe offset band may not fit in a 16-bit extra field.
+      // Move the payload to the next feasible band while keeping size safe.
+      length = nextSafeField(length + Math.max(1, nextSafeField(end) - end - MAX_SAFE_U16))
+    }
+    const pad = length - baseLength - CRC_SUFFIX_BYTES
     let state = contentCrcState(part.content)
-    for (let pad = 0; pad <= MAX_PLAN_PAD && chosen === undefined; pad += 1) {
-      if (pad > 0) state = crcFold(state, 0x0a)
-      const length = baseLength + pad
-      if (!safeField(length)) continue
-      const crc = (state ^ 0xffffffff) >>> 0
-      if (!safeField(crc)) continue
-      const extraLength = feasibleExtraLength(minEnd + pad)
-      if (extraLength === undefined) continue
-      const content = pad === 0 ? part.content : part.content + '\n'.repeat(pad)
-      chosen = { content, crc, extraLength, end: minEnd + pad + extraLength }
-    }
-    if (chosen === undefined) {
-      throw new Error(`cannot lay out an ASCII-safe zip entry for "${part.name}" (offset=${offset})`)
-    }
+    for (let index = 0; index < pad; index += 1) state = crcFold(state, 0x0a)
+    const { suffix, crc } = safeCrcSuffix(state)
     planned.push({
       name: part.name,
-      content: chosen.content,
-      crc: chosen.crc,
+      content: part.content + '\n'.repeat(pad) + suffix,
+      crc,
       offset,
-      localExtraLength: chosen.extraLength,
+      localExtraLength: extraLength,
       commentLength: 0,
       centralExtraLength: 0,
     })
-    offset = chosen.end
+    offset += headerSize + extraLength + length
   }
   // Steer the central-directory size with the last entry's comment (plus,
   // only when the comment byte alone cannot reach a safe value, a bounded
   // valid central extra field) so the EOCD's directory-size field and the
   // steering fields themselves stay ASCII-safe.
   const baseDirectorySize = planned.reduce((sum, entry) => sum + CENTRAL_HEADER_BYTES + entry.name.length, 0)
-  const extraCandidates = [0]
-  for (let total = 4; total <= 0x7f; total += 1) extraCandidates.push(total)
   let commentLength = -1
   let centralExtraLength = -1
-  outer: for (const extra of extraCandidates) {
-    for (let comment = 0; comment <= 0x7f; comment += 1) {
-      if (safeField(baseDirectorySize + extra + comment)) {
-        centralExtraLength = extra
-        commentLength = comment
-        break outer
-      }
+  for (let comment = 0; comment <= MAX_SAFE_U16; comment = nextSafeField(comment + 1)) {
+    const extra = feasibleExtraLength(baseDirectorySize + comment)
+    if (extra !== undefined) {
+      centralExtraLength = extra
+      commentLength = comment
+      break
     }
   }
   if (commentLength < 0 || centralExtraLength < 0) {
@@ -246,10 +285,32 @@ function planEntries(parts: ZipPart[]): PlannedArchive {
  * order, the central directory, and the end-of-central-directory record.
  */
 export function buildAsciiZip(parts: ZipPart[]): string {
-  if (parts.length === 0 || parts.length > 0x7f) {
-    throw new Error(`an ASCII-safe package holds 1..127 entries, got ${parts.length}`)
+  if (parts.length === 0 || parts.length > MAX_SAFE_U16) {
+    throw new Error(`an ASCII-safe package holds 1..${MAX_SAFE_U16} entries, got ${parts.length}`)
   }
-  const plan = planEntries(parts)
+  const count = nextSafeField(parts.length)
+  const names = new Set(parts.map(part => part.name))
+  if (names.size !== parts.length) throw new Error('cannot write a zip archive with duplicate entry names')
+  const expanded = [...parts]
+  const paddingNames: string[] = []
+  for (let index = 1; expanded.length < count; index += 1) {
+    const name = `dshPadding/pad${index}.xml`
+    if (names.has(name)) continue
+    names.add(name)
+    paddingNames.push(name)
+    expanded.push({ name, content: '<padding xmlns="urn:dsh-office-tools:padding"/>' })
+  }
+  // Unreferenced XML parts make the actual EOCD count byte-safe. Most OOXML
+  // packages already declare the .xml default. Preserve other packages by
+  // adding explicit content types for only our new parts when it is absent.
+  const typesIndex = expanded.findIndex(part => part.name === '[Content_Types].xml')
+  if (paddingNames.length > 0 && typesIndex >= 0 && !/<Default\b[^>]*\bExtension=["']xml["']/i.test(expanded[typesIndex]!.content)) {
+    const original = expanded[typesIndex]!
+    const overrides = paddingNames.map(name => `<Override PartName="/${name}" ContentType="application/xml"/>`).join('')
+    if (!/<\/(?:\w+:)?Types\s*>/.test(original.content)) throw new Error('cannot add padding parts to malformed content types')
+    expanded[typesIndex] = { ...original, content: original.content.replace(/<\/(?:\w+:)?Types\s*>/, `${overrides}$&`) }
+  }
+  const plan = planEntries(expanded)
   const planned = plan.entries
   const local: string[] = []
   const central: string[] = []
@@ -283,6 +344,9 @@ export function buildAsciiZip(parts: ZipPart[]): string {
   }
   if (!safeField(directorySize) || !safeField(directoryOffset)) {
     throw new Error('internal error: the planned central directory fields are not ASCII-safe')
+  }
+  if (directoryOffset + directorySize + EOCD_BYTES > MAX_OFFICE_FILE_BYTES) {
+    throw new Error('generated Office package exceeds the 50 MiB write budget')
   }
   const eocd = ['PK\x05\x06', u16(0), u16(0), u16(planned.length), u16(planned.length),
     u32(directorySize), u32(directoryOffset), u16(0)].join('')

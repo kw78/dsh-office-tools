@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '15 0 * * *'
 
 permissions:
   contents: read
@@ -36,6 +39,10 @@ jobs:
   # slipped through) — this job can.
   real-composition:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dsh-version: ['0.1.2-rc.1', '0.2.0-rc.1']
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -44,15 +51,26 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run build
+      - name: Install the target DSH line
+        if: matrix.dsh-version != '0.1.2-rc.1'
+        env:
+          DSH_TARGET: ${{ matrix.dsh-version }}
+        run: >-
+          pnpm add -D @deepseek-ai/cordis@4.0.4 @deepseek-ai/dsh-agent@${DSH_TARGET}
+          @deepseek-ai/dsh-fs@${DSH_TARGET} @deepseek-ai/dsh-fs-sandbox@${DSH_TARGET}
+          @deepseek-ai/dsh-llm@${DSH_TARGET} @deepseek-ai/dsh-session@${DSH_TARGET}
+          @deepseek-ai/dsh-sandbox@${DSH_TARGET} @deepseek-ai/dsh-sandbox-policy@${DSH_TARGET}
+          @deepseek-ai/dsh-session-projection@${DSH_TARGET} @deepseek-ai/dsh-tools@${DSH_TARGET}
+          --registry https://registry.npmjs.org
+      - run: pnpm run check
       - run: pnpm run test:e2e
 
   # Forward-compatibility tripwire: the same E2E against the platform's
   # `next` dist-tag (ad-hoc override; lockfile changes are NOT committed —
   # this job only verifies compatibility ahead of a release).
   compat-next:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -62,9 +80,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --no-frozen-lockfile --registry https://registry.npmjs.org
       - run: >-
-          pnpm add -D @deepseek-ai/dsh-fs@next @deepseek-ai/dsh-fs-sandbox@next
+          pnpm add -D @deepseek-ai/cordis@latest @deepseek-ai/dsh-fs@next @deepseek-ai/dsh-fs-sandbox@next
           @deepseek-ai/dsh-sandbox@next @deepseek-ai/dsh-sandbox-policy@next
           @deepseek-ai/dsh-session-projection@next @deepseek-ai/dsh-tools@next
+          @deepseek-ai/dsh-agent@next @deepseek-ai/dsh-llm@next @deepseek-ai/dsh-session@next
           --registry https://registry.npmjs.org
       - run: pnpm run build
       - run: pnpm run test:e2e
