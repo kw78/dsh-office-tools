@@ -129,11 +129,11 @@ DSH 是 Cordis 插件内核：
 - jszip 范围维持 `^3.10.1`：zip 守卫读其私有 `_data.uncompressedSize`，未来版本若移除该字段，守卫按条目静默跳过（降级为 50 MiB 压缩上限兜底）而非崩溃，升级时按 ROADMAP 复核即可。
 - 附带收益：`lib/index.js` 不再包含第三方库内部代码，Mimosa 类提交扫描对构建产物的误报面大幅缩小。
 
-### 4.13 零依赖与官方 fs 通道架构（1.0.0）
+### 4.13 零依赖与官方 fs 通道架构（1.0.0；1.0.5 更新见下文）
 
 - 背景（DSH Store #334 的后续三轮复检）：`source-verified` 条目的更新必须通过**完整**自动低风险策略——零 reason。字节上限 0.6.0 已过，剩余三个阻断是：`runtime or optional dependencies require a separate supply-chain review`（运行时依赖）、`runtime source contains the files permission signal`（`node:fs` 导入或 `readFile/writeFile/...(` 调用名）、`runtime source contains the commands permission signal`（`child_process` 导入或 `exec/spawn/...(`——**注意 `RegExp.prototype.exec(` 也会命中**，0.6.x 的正则用法即因此被判信号）。另有最新三版兼容窗口要求逐版本精确 `compatible` 声明。
 - 官方通道：`@deepseek-ai/dsh-fs` 提供 `ctx.fs`（resolve/contains/stat/readBytes/writeText…）。读走 `readBytes`（二进制无碍）；写只有 UTF-8 `writeText`——这是硬约束，也是 1.0.0 全部架构的出发点。
-- ASCII-safe STORE zip：生成的包每个字节 <=0x7F。连续式规划器（`src/asciizip.ts`）把条目首尾相接铺开、不留任何间隙——Microsoft Office 的 OPC 读取器不接受带间隙的包，而 Python `zipfile` 会容忍，所以旧的全绿测试也漏检（issue #5）：部件内容用 XML 根元素后的合法尾随换行填充，直至该条目的长度与 CRC-32 全部字节安全；下一偏移由一个小型合法 local extra field（id 0、总长 4..127）微调，绕开"长度低字节与下一偏移低字节在 0x80 处互补"的死锁；因偏移不再对齐槽位，落入每 64 KiB 页不安全带（偏移字节 >0x7F）的部件会被填充越过该带。CD 大小用末条目注释 + 合法 CD extra 双自由度导向。
+- ASCII-safe STORE zip：生成的包每个字节 <=0x7F。1.0.5 的规划器先确定安全长度与连续偏移，再改变固定长度的 8 个尾随空格/tab 来调整 CRC，避免三个约束争抢换行搜索范围。local extra field 与 CD 注释/extra 的安全 16 位长度最多 0x7F7F。条目数落入不安全字节区间时，以合法、不引用的 XML 部件补齐实际条目数，必要时添加 content type。输出最多 50 MiB；不允许重复条目名。详见 [架构分析](ARCHITECTURE.zh.md)。
 - 图片=链接（`a:blip r:link` + TargetMode=External）：包内零二进制字节，模型保留全部摆放自由度；PNG/JPG/GIF 头部嗅探（`src/imgsize.ts`）提供原图尺寸默认值；cover 用 `a:srcRect` 百分比裁剪。注意：PowerPoint 默认阻止外部内容，链接图片渲染为"已阻止自动下载此图片"占位符，需用户启用外部内容或把目录加入信任中心可信位置——这是 PowerPoint 的安全策略，非包结构缺陷；内嵌图片在 `writeText` 纯文本通道下不可能实现。
 - 读取兼容性：自研 zip 读取器解析 EOCD/CD，本地头按自身 nameLen/extraLen 定位切片，STORE 直读、DEFLATE 走 `node:zlib` 且以声明尺寸为膨胀上限——原 zip 炸弹守卫语义完整保留（条目/总量/条目数三预算 + DOCTYPE/ENTITY 拒绝 + 伪 zip 友好报错）。
 - 本地门禁复检：`tests/store-gate-replica.mjs` 逐字复刻商店 `analyzeFixedSource` + `permissionSignals` 正则与全部边界，对工作树运行；1.0.0 固定源输出零 reason、零信号。兼容声明全部有实测：0.1.1-rc.2 / 0.1.2-alpha.4 / alpha.5 / rc.1 四条线的 `@deepseek-ai/*` devDeps 下 51/51 全绿。更新流程用商店自己的 `catalog-update-review.mjs` + `catalog-compatibility-policy.mjs` 模块本地仿真：`newer-version → 身份一致 → 更新写入 → 恢复 approved、清除下架原因、删除 managed candidate`。

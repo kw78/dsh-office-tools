@@ -61,7 +61,7 @@ function walk(dir, out = []) {
     if (entry.name === '.git' || entry.name === 'node_modules') continue
     const absolute = join(dir, entry.name)
     if (entry.isDirectory()) walk(absolute, out)
-    else if (entry.isFile()) out.push({ absolute, rel: relative(process.cwd(), absolute), mode: lstatSync(absolute).mode })
+    else if (entry.isFile()) out.push({ absolute, rel: relative(process.cwd(), absolute).replaceAll('\\', '/'), mode: lstatSync(absolute).mode })
   }
   return out
 }

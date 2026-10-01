@@ -61,6 +61,8 @@ pnpm install && pnpm run check   # typecheck + tests + build
 pnpm run test:e2e                # real-composition E2E (sandbox-policy + fs-sandbox + tools)
 ```
 
-Compatibility: DSH `>=0.1.0-rc.6`; exact per-release records live in `package.json` (`dsh.compatibility.dshReleases`).
+Compatibility: the declared DSH 0.1.x ranges and `>=0.2.0-rc.1 <0.3.0-0`; exact tested releases live in `package.json` (`dsh.compatibility.dshReleases`). CI exercises both 0.1.2-rc.1 and 0.2.0-rc.1. DSH 0.3.x is not declared supported.
+
+Generated packages are limited to 50 MiB. Up to 200 PPT slides (including an optional title slide) are accepted; linked images remain external. See [architecture and migration plan](docs/ARCHITECTURE.zh.md) for the binary-write seam needed for true embedding.
 
 Further reading: [DEVELOPMENT.md](docs/DEVELOPMENT.md) · [ROADMAP.md](docs/ROADMAP.md) · [hub-registration.md](docs/hub-registration.md) · MIT [License](LICENSE)

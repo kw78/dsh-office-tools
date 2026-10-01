@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.5] - 2026-10-01
+
+### Fixed
+- Long PPT generation (#7): choose byte-safe sizes and contiguous offsets independently of CRC, then vary eight legal XML whitespace bytes at fixed length to obtain a byte-safe CRC. Valid local extra fields can bridge larger unsafe bands. The writer no longer relies on a fixed 64 KiB newline search.
+- Packages above 127 entries use unreferenced XML padding parts to reach an actual byte-safe EOCD count; existing names are preserved and new parts receive content types where needed. Generated output is bounded to 50 MiB and duplicate names are refused.
+- The 200-slide PPT budget now includes an optional title slide.
+- DSH 0.2.0-rc.1 compatibility (#6): validated against the actual 0.2.0-rc.1 packages, widened the five peer ranges, synchronized compatibility metadata and plugin version, and added the host's semver gate as a regression check.
+
+### Validation and maintenance
+- Added independent JSZip CRC checks and end-to-end long-PPT tests (5/7/10/25/29/57/200 slides with notes and Chinese text).
+- Verified Word, Excel, and PowerPoint through real Microsoft Office COM; PowerPoint opened 5/29/200-slide decks, Word opened a package with padded entry count, and Excel recalculated the formula.
+- CI exercises both supported DSH lines; nightly/manual next-line checks no longer swallow failures and update all direct DSH development packages together.
+- Explicitly disable the unused transitive koffi build hook; esbuild remains enabled. Runtime dependencies and file-access boundaries are unchanged.
+- Added architecture analysis and a staged binary-embedding migration plan. Images are still linked in this version.
+
 ## [1.0.4] - 2026-09-22
 
 ### Fixed
