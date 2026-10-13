@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **`ppt_read` aborted on any deck whose pictures lack `descr`** (field report #9 against 1.0.5): `extractElements` wrote an explicit `alt: undefined` for pictures whose `cNvPr` has no `descr` attribute — optional in PresentationML, and omitted by PowerPoint whenever Alt Text was never filled in — so the harness's lossless-JSON guard failed the entire call before schema validation and no slide data came back at all. The `alt` key is now omitted when the attribute is absent; `descr=""` still reports `alt: ""`. `tests/ppt-read.spec.ts` pins the present/empty/absent boundary.
+- **`ppt_read` aborted on slides containing a non-table `graphicFrame`** (same report): embedded OLE objects, charts, and other frames travel in `graphicFrame` but carry no `a:tbl`, so `text` was `undefined` and failed the same guard. Such frames are now reported as `{ type: 'graphicFrame', ... }` with their bounding box and no `text` (already optional in the schema), and label as `FRAME` in the wireframe sketch. A deck with an OLE frame and a table frame at identical geometry — and a lossless-JSON guard mirroring the harness check — covers both regressions.
+
 ## [1.0.5] - 2026-10-01
 
 ### Fixed

@@ -80,7 +80,7 @@ interface PptReadArgs {
 
 /** One placed element, echoed by create and parsed back by read. */
 export interface SlideElementBox {
-  type: 'text' | 'bullets' | 'image' | 'table'
+  type: 'text' | 'bullets' | 'image' | 'table' | 'graphicFrame'
   xIn: number
   yIn: number
   wIn: number
@@ -617,7 +617,11 @@ export function sketchSlide(widthIn: number, heightIn: number, elements: Array<P
   }
 
   for (const element of elements) {
-    const label = element.type === 'image' ? 'IMG' : (element.text ?? element.type).split(/\s+/)[0]?.slice(0, 10) || element.type
+    const label = element.type === 'image'
+      ? 'IMG'
+      : element.type === 'graphicFrame'
+        ? 'FRAME'
+        : (element.text ?? element.type).split(/\s+/)[0]?.slice(0, 10) || element.type
     drawRect(element.xIn, element.yIn, element.wIn, element.hIn, label)
   }
 
@@ -713,15 +717,19 @@ function extractElements(slideXmlText: string): SlideElementBox[] {
         }
     if (block.startsWith('<p:pic')) {
       const descr = (block).match(PICTURE_DESCR)?.[1]
-      elements.push({ type: 'image', ...base, alt: descr === undefined ? undefined : decodeXmlEntities(descr) })
+      // descr is optional in PresentationML: omit `alt` rather than emit an
+      // explicit undefined, which fails the harness's lossless-JSON guard.
+      elements.push(descr === undefined
+        ? { type: 'image', ...base }
+        : { type: 'image', ...base, alt: decodeXmlEntities(descr) })
       continue
     }
     if (block.startsWith('<p:graphicFrame')) {
       const table = extractTables(block)[0]
-      elements.push({
-        type: 'table', ...base,
-        text: table === undefined ? undefined : `${table.length}x${table[0]?.length ?? 0}`,
-      })
+      // Frames also carry OLE objects and charts; only a real table gets `text`.
+      elements.push(table === undefined
+        ? { type: 'graphicFrame', ...base }
+        : { type: 'table', ...base, text: `${table.length}x${table[0]?.length ?? 0}` })
       continue
     }
     const text = extractParagraphs(stripTables(block), false).join(' | ')
@@ -796,7 +804,7 @@ const ELEMENT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    type: { type: 'string', required: true, description: 'Element kind: text, bullets, image, or table.' },
+    type: { type: 'string', required: true, description: 'Element kind: text, bullets, image, table, or graphicFrame (an OLE object, chart, or other non-table frame).' },
     xIn: { type: 'number', required: true, description: 'Left edge in inches from the slide origin.' },
     yIn: { type: 'number', required: true, description: 'Top edge in inches from the slide origin.' },
     wIn: { type: 'number', required: true, description: 'Width in inches.' },

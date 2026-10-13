@@ -46,6 +46,46 @@ async function buildPptx(slides: string[]): Promise<Buffer> {
   return zip.generateAsync({ type: 'nodebuffer' })
 }
 
+/**
+ * The DSH harness rejects a tool result containing any `undefined` value
+ * ("value is not lossless JSON") before schema validation runs; this in-process
+ * harness returns the raw object, so mirror that guard here.
+ */
+function isLosslessJson(value: unknown): boolean {
+  if (value === undefined) return false
+  if (Array.isArray(value)) return value.every(isLosslessJson)
+  if (value !== null && typeof value === 'object') return Object.values(value).every(isLosslessJson)
+  return true
+}
+
+/** Issue #9 cause 1: `descr` present (non-empty), empty, and absent. */
+const SLIDE_DESCR_BOUNDARY = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:pic><p:nvPicPr><p:cNvPr id="2" name="Picture 1" descr="red parts crate"/></p:nvPicPr></p:nvPicPr></p:pic>
+    <p:pic><p:nvPicPr><p:cNvPr id="3" name="Picture 2" descr=""/></p:nvPicPr></p:nvPicPr></p:pic>
+    <p:pic><p:nvPicPr><p:cNvPr id="4" name="Picture 3"/></p:nvPicPr></p:nvPicPr></p:pic>
+  </p:spTree></p:cSld>
+</p:sld>`
+
+/** Issue #9 cause 2: an OLE frame and a table frame at identical geometry. */
+const SLIDE_TABLE_PLUS_OLE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:graphicFrame>
+      <p:xfrm><a:off x="1828800" y="3657600"/><a:ext cx="7315200" cy="1828800"/></p:xfrm>
+      <a:tbl>
+        <a:tr><a:tc><a:txBody><a:p><a:r><a:t>part</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>qty</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+        <a:tr><a:tc><a:txBody><a:p><a:r><a:t>chain</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>2</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+      </a:tbl>
+    </p:graphicFrame>
+    <p:graphicFrame>
+      <p:xfrm><a:off x="1828800" y="3657600"/><a:ext cx="7315200" cy="1828800"/></p:xfrm>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole"><p:oleObj name="Worksheet"/></a:graphicData></a:graphic>
+    </p:graphicFrame>
+  </p:spTree></p:cSld>
+</p:sld>`
+
 describe('ppt_read tables (0.5.0)', () => {
   test('tables come back structured and stay out of paragraphs', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-office-ppttbl-'))
@@ -112,6 +152,48 @@ describe('ppt_read image alt texts (0.5.0)', () => {
       expect(box).toMatchObject({ xIn: 1, yIn: 2, wIn: 5, hIn: 1 })
       const table = read.slides[0].elements.find((element: any) => element.type === 'table')
       expect(table).toBeDefined()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('ppt_read survives decks written by other tools (issue #9)', () => {
+  test('descr present, empty, and absent: only the absent attribute omits alt', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-office-pptissue9-descr-'))
+    try {
+      await writeFile(join(root, 'deck.pptx'), await buildPptx([SLIDE_DESCR_BOUNDARY]))
+      const tools = mountTools()
+      const read = await run(tools, 'ppt_read', { path: 'deck.pptx' }, root) as any
+
+      expect(isLosslessJson(read)).toBe(true)
+      const elements = read.slides[0].elements
+      expect(elements.map((element: any) => element.type)).toEqual(['image', 'image', 'image'])
+      expect(elements[0].alt).toBe('red parts crate')
+      expect(elements[1].alt).toBe('')
+      expect('alt' in elements[2]).toBe(false)
+      expect(read.slides[0].imageAlts).toEqual(['red parts crate'])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a non-table graphicFrame reports as graphicFrame without text', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-office-pptissue9-frame-'))
+    try {
+      await writeFile(join(root, 'deck.pptx'), await buildPptx([SLIDE_TABLE_PLUS_OLE]))
+      const tools = mountTools()
+      const read = await run(tools, 'ppt_read', { path: 'deck.pptx' }, root) as any
+
+      expect(isLosslessJson(read)).toBe(true)
+      const elements = read.slides[0].elements
+      expect(elements.map((element: any) => element.type)).toEqual(['table', 'graphicFrame'])
+      expect(elements[0]).toMatchObject({ text: '2x2', xIn: 2, yIn: 4, wIn: 8, hIn: 2 })
+      expect(elements[1]).toMatchObject({ xIn: 2, yIn: 4, wIn: 8, hIn: 2 })
+      expect('text' in elements[1]).toBe(false)
+
+      const blocks = tools.get('ppt_read')!.output!.render({} as never, read as never) as Array<{ text: string }>
+      expect(blocks.map(block => block.text).join('')).toContain('FRAME')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

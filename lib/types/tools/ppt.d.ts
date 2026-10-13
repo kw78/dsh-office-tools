@@ -44,7 +44,7 @@ interface PptCreateArgs {
 }
 /** One placed element, echoed by create and parsed back by read. */
 export interface SlideElementBox {
-    type: 'text' | 'bullets' | 'image' | 'table';
+    type: 'text' | 'bullets' | 'image' | 'table' | 'graphicFrame';
     xIn: number;
     yIn: number;
     wIn: number;
