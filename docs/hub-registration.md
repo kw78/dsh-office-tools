@@ -60,7 +60,7 @@ maintainer reference only.
   "kind": "extension",
   "tags": ["office", "word", "excel", "powerpoint", "tools"],
   "author": { "name": "kw78", "url": "https://github.com/kw78" },
-  "version": "1.0.7",
+  "version": "1.0.8",
   "license": "MIT",
   "source": {
     "repository": "https://github.com/kw78/dsh-office-tools",
