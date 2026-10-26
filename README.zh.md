@@ -27,6 +27,19 @@
 
 <img src="docs/demo/session.svg" alt="一句话生成 report.docx、budget.xlsx、deck.pptx" width="780">
 
+## 定位
+
+这是无界面的 OOXML 工具箱，不是可视化办公套件：解包后约 160 KB，零运行时 npm 依赖（全部打包进产物），没有本地服务、不需要浏览器、不收集遥测。所有写入都经 DSH 文件系统服务，因此桌面会话与 CI 中的行为完全一致。
+
+| | dsh-office-tools | 可视化办公套件（如基于 Univer 的插件） |
+|---|---|---|
+| 产物 | 标准 `.docx` / `.xlsx` / `.pptx` 文件 | 原生文档模型，再导出为 Office 格式 |
+| 运行时 | 仅需 Node ≥ 20 | 本地网关服务 + 无头 Chromium |
+| 安装体积 | 解包约 160 KB | 数百 MB |
+| 审阅方式 | 工具结果、Markdown、线框图 | 实时画布预览与审批卡片 |
+
+需要逐处查看、逐项批准修改时选可视化套件；需要 agent 批量产出标准 Office 文件、不想引入额外运行时，选本插件。
+
 ## 安装
 
 ```bash
@@ -61,7 +74,7 @@ pnpm install && pnpm run check   # typecheck + tests + build
 pnpm run test:e2e                # 真实组合 E2E（sandbox-policy + fs-sandbox + tools）
 ```
 
-兼容性：声明的 DSH 0.1.x 区间，以及 `>=0.2.0-rc.1 <0.3.0-0`；逐版本的实测记录见 `package.json`（`dsh.compatibility.dshReleases`）。CI 验证 0.1.2-rc.1 和 0.2.0-rc.1，尚未声明支持 DSH 0.3.x。
+兼容性：声明的 DSH 0.1.x 区间，以及 `^0.2.0-rc.1 || ^0.2.1-rc.3`；逐版本的实测记录见 `package.json`（`dsh.compatibility.dshReleases`）。CI 验证 0.1.2-rc.1、0.2.0-rc.1 和 0.2.1-rc.3，尚未声明支持 DSH 0.3.x。
 
 生成文件最多 50 MiB；PPT 最多 200 页（包含可选封面）。图片仍为外部链接。分层架构与真实图片嵌入的迁移方案见 [架构分析](docs/ARCHITECTURE.zh.md)。
 

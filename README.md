@@ -27,6 +27,19 @@ One prompt, a quarterly-report trio:
 
 <img src="docs/demo/session.svg" alt="One prompt generating report.docx, budget.xlsx, and deck.pptx" width="780">
 
+## Positioning
+
+A headless OOXML toolkit, not a visual office suite: about 160 KB unpacked, no runtime npm dependencies (everything is bundled), no local service, no browser, and no telemetry. Every write goes through the DSH filesystem service, so behavior is identical in a desktop session and in CI.
+
+| | dsh-office-tools | Visual office suites (e.g. Univer-based plugins) |
+|---|---|---|
+| Output | Standard `.docx` / `.xlsx` / `.pptx` files | Native document model, exported to Office formats |
+| Runtime | Node ≥ 20 only | Local gateway service + headless Chromium |
+| Install size | ~160 KB unpacked | Hundreds of MB |
+| Review | Tool results, markdown, wireframe sketches | Live canvas previews and approval cards |
+
+Use a visual suite when you need to see and approve every edit; use this plugin when the agent should produce standard Office files in bulk without extra moving parts.
+
 ## Install
 
 ```bash
@@ -61,7 +74,7 @@ pnpm install && pnpm run check   # typecheck + tests + build
 pnpm run test:e2e                # real-composition E2E (sandbox-policy + fs-sandbox + tools)
 ```
 
-Compatibility: the declared DSH 0.1.x ranges and `>=0.2.0-rc.1 <0.3.0-0`; exact tested releases live in `package.json` (`dsh.compatibility.dshReleases`). CI exercises both 0.1.2-rc.1 and 0.2.0-rc.1. DSH 0.3.x is not declared supported.
+Compatibility: the declared DSH 0.1.x ranges and `^0.2.0-rc.1 || ^0.2.1-rc.3`; exact tested releases live in `package.json` (`dsh.compatibility.dshReleases`). CI exercises 0.1.2-rc.1, 0.2.0-rc.1, and 0.2.1-rc.3. DSH 0.3.x is not declared supported.
 
 Generated packages are limited to 50 MiB. Up to 200 PPT slides (including an optional title slide) are accepted; linked images remain external. See [architecture and migration plan](docs/ARCHITECTURE.zh.md) for the binary-write seam needed for true embedding.
 

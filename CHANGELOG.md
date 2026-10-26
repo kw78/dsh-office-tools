@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **DSH `0.2.1-rc.3` is declared and CI-tested.** The previous range `>=0.2.0-rc.1 <0.3.0-0` did not match `0.2.1-rc.3` under semver's default prerelease rule (a prerelease needs a comparator with the same `major.minor.patch`), so hosts and npm resolved the new line's peers as unsatisfied. Every peer range gains `|| ^0.2.1-rc.3`; `dsh.compatibility.dshReleases` and `dshWorkshop.dshVersions` gain the release; the real-composition matrix runs it against its required `cordis ~4.0.5` (`0.2.0-rc.1` keeps `~4.0.4`). A regression test now evaluates every compatible release against the declared ranges **without** `includePrerelease`, matching how hosts and npm evaluate them.
+- `package.json` gains `engines.dsh` (mirroring `dsh.plugin.json`) so index generators can read the supported host range from npm metadata.
+- Both READMEs gain a positioning table: headless OOXML toolkit (~160 KB, no runtime dependencies, no service or browser) versus visual office suites.
+
 ## [1.0.6] - 2026-10-13
 
 ### Fixed
