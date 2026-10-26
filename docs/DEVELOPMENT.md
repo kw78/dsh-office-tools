@@ -166,10 +166,10 @@ DSH 是 Cordis 插件内核：
 | npm | 0.6.0 起由 `publish.yml` 自动发布（tag/Release 触发 + provenance）；1.0.2 起补齐仓库 `NPM_TOKEN` secret 后链路畅通（此前 v1.0.1 曾因缺 secret 发布失败未察觉），跨版本内容见 CHANGELOG |
 | topics | `dsh`, `dsh-plugin`, `deepseek-harness`, `office` 等 |
 | CI | `pnpm run check` node 20/22 矩阵 + `real-composition`（真实包组合 E2E，阻塞）+ `compat-next`（`next` 线前瞻，非阻塞），全绿 |
-| tag | `v0.1.0` ~ `v0.5.0` |
+| tag | `v0.1.0` ~ `v1.0.8` |
 | awesome-dsh-plugin | PR #405 已合并 |
 | dsh-market | 随 awesome 列表同步 |
-| dsh-hub / Atlas | 未收录，候选 entry 在 `docs/hub-registration.md`（0.6.0 已刷新，提交动作待维护者） |
+| dsh-hub / Atlas | 未收录，候选 entry 在 `docs/hub-registration.md`（1.0.8 已刷新，提交动作待维护者） |
 | DSH Store (AI-Scarlett) | 自动收录于 0.1.0；0.5.0 更新因运行时字节上限暂缓（#334）；0.6.0 去内联化后达标（单文件 90.6 kB / 总量 101.6 kB），推送后等其 8 小时周期自动复检 |
 
 ## 7. 安装方式
@@ -191,10 +191,10 @@ dsh plugin --profile web add github:kw78/dsh-office-tools
 3. `excel_read` / `excel_update` 把整个 buffer 交给 SheetJS，无法逐部件做 DTD 检查；SheetJS 自带解析器不做实体展开/外部实体。
 4. `excel_update` 会由 SheetJS 重写工作簿，图表、宏等高级特性可能丢失。
 5. 不支持旧 OLE 格式 `.doc/.xls/.ppt`。
-6. `ppt_read` 只提取文本和图片数量，不解析表格、SmartArt、图片内容。
+6. `ppt_read` 提取文本、表格单元格、备注与形状几何（英寸坐标）；不解析 SmartArt 内容、图表数据或图片像素；OLE/图表等非表格 frame 以 `graphicFrame` 返回几何。
 7. Word 有 `word_update` 追加能力（0.4.0），但仍没有原位编辑/删除/模板替换；PPT 没有更新能力。
 8. npm 的 `@deepseek-ai/*` 为 optional peerDependencies；裸环境 import 会失败是预期的，必须在 DSH profile 内加载。
-9. 当前机器上 web profile 已通过 link 接入插件，但运行中的 DSH 进程未重启时不会加载新 host 插件。
+9. 本机使用 desktop profile 从 npm 安装插件（已不再使用 web profile + link 的方式）；运行中的 DSH 进程未重启时不会加载新 host 插件。
 
 ## 9. 改进路线建议
 
@@ -220,6 +220,8 @@ git commit -m "fix: ..."
 git push
 ```
 
+兼容元数据只有一个源：改根目录 `compatibility.json`（DSH 区间、实测版本、CI 矩阵行），再跑 `pnpm run sync:metadata` 写入 `package.json`（peer 区间、`dshReleases`、`engines.dsh`、`dshWorkshop.dshVersions`）、`dsh.plugin.json`、两份 README 与 `.github/workflows/ci.yml`。`pnpm run check` 自带 `--check`，任何副本漂移都会直接失败。
+
 ### 10.2 发布新版本（0.6.0 起：Release 触发 + provenance）
 
 一次性前置（仅首次）：
@@ -243,7 +245,7 @@ git tag vx.y.z && git push --follow-tags
 使用 `tests/tools.spec.ts` 或真实 profile：
 
 ```bash
-# 在 DSH web profile 重启后，模型直接调用工具即可
+# 本机 desktop profile 从 npm 安装，重启 DSH 后模型直接调用工具即可
 ```
 
 ## 11. 安全注意事项

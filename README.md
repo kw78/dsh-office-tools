@@ -6,6 +6,8 @@
 
 Eight model-facing Office file tools for DeepSeek Harness: create, read, and update Word (`.docx`), Excel (`.xlsx`), and PowerPoint (`.pptx`) files inside the session workspace. Zero runtime dependencies — every package is generated and parsed by the plugin's own OOXML engine, and every byte crosses the official `ctx.fs` service.
 
+**Scope:** this is a file generator, not an editor. It creates files and appends to them (`word_update` appends; there is no `ppt_update`), `word_create` and each `word_update` write at most one table, and PPT images are **linked, not embedded** because the workspace write channel is text-only.
+
 ## Tools
 
 | Tool | Purpose |
@@ -74,7 +76,9 @@ pnpm install && pnpm run check   # typecheck + tests + build
 pnpm run test:e2e                # real-composition E2E (sandbox-policy + fs-sandbox + tools)
 ```
 
-Compatibility: the declared DSH 0.1.x ranges and `^0.2.0-rc.1 || ^0.2.1-rc.3`; exact tested releases live in `package.json` (`dsh.compatibility.dshReleases`). CI exercises 0.1.2-rc.1, 0.2.0-rc.1, and 0.2.1-rc.3. DSH 0.3.x is not declared supported.
+<!-- compatibility:start -->
+Compatibility: `^0.1.0-rc.6 || ^0.1.1-rc.0 || ^0.1.2-alpha.0 || ^0.1.5-alpha.0 || ^0.2.0-rc.1 || ^0.2.1-rc.3`; exact tested releases live in `package.json` (`dsh.compatibility.dshReleases`). CI exercises 0.1.2-rc.1, 0.2.0-rc.1, and 0.2.1-rc.3. DSH 0.3.x is not declared supported.
+<!-- compatibility:end -->
 
 Generated packages are limited to 50 MiB. Up to 200 PPT slides (including an optional title slide) are accepted; linked images remain external. See [architecture and migration plan](docs/ARCHITECTURE.zh.md) for the binary-write seam needed for true embedding.
 

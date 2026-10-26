@@ -8,7 +8,8 @@ blocks needed to onboard `dsh-office-tools` into the DSH community indexes.
 - URL: <https://github.com/kw78/dsh-office-tools>
 - Branch: `main`
 - Package: `dsh-office-tools` (declares `dsh.bundle.patch` → `cordis.patch.yml`)
-- Install: `dsh plugin --profile web add github:kw78/dsh-office-tools`
+- Install: `dsh plugin --profile web add dsh-office-tools` (npm; the GitHub
+  source ref `github:kw78/dsh-office-tools` also works)
 
 ## GitHub topics
 
@@ -74,8 +75,8 @@ maintainer reference only.
       "vulnerabilityScan": "unknown",
       "permissions": "workspace-fs",
       "nativeCode": "none",
-      "installScripts": "build-only",
-      "runtimeDependencies": "docx/jszip/pptxgenjs (npm) + xlsx (SheetJS CDN 0.20.3 tarball URL)",
+      "installScripts": "none (no preinstall/install/postinstall)",
+      "runtimeDependencies": "none (all code bundled into lib/index.js)",
       "provenance": "npm --provenance via GitHub Actions OIDC (publish.yml)",
       "ciMatrix": "node 20/22; DSH 0.1.2-rc.1, 0.2.0-rc.1, 0.2.1-rc.3"
     }
@@ -90,7 +91,7 @@ maintainer reference only.
     "mode": "profile-bundle",
     "adapter": "official-profile/v1",
     "packageName": "dsh-office-tools",
-    "spec": "github:kw78/dsh-office-tools"
+    "spec": "dsh-office-tools"
   },
   "links": {
     "atlas": "https://github.com/kw78/dsh-office-tools",

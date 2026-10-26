@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **`compatibility.json` is now the single source for host compatibility.** `scripts/sync-metadata.mjs` writes the range, tested releases, and CI rows into `package.json` (peer ranges, `dshReleases`, `engines.dsh`, `dshWorkshop.dshVersions`), `dsh.plugin.json`, both READMEs, and the `real-composition` matrix. `pnpm run check` runs the script with `--check` and fails on any drift, so the six copies can no longer diverge silently.
+
+### Changed
+
+- **Both READMEs lead with scope instead of a feature count.** The plugin is a file generator, not an editor: `word_update` only appends, there is no `ppt_update`, each Word write carries at most one table, and PPT images stay linked because the workspace write channel is text-only. `docs/DEVELOPMENT.md` also drops stale statements: the tag range now ends at v1.0.8, the install note names the desktop profile from npm, and `ppt_read` is documented as returning tables and shape geometry.
+- The Hub candidate entry now states the real package facts: zero runtime dependencies (the old entry still listed docx/pptxgenjs/xlsx), no install hooks, and the npm package name as the install spec.
+- `[1.0.1]` now records that its npm publish failed on a missing `NPM_TOKEN` (the tag exists; the registry goes 1.0.0 → 1.0.2).
+
 ## [1.0.7] - 2026-10-26
 
 ### Changed
@@ -66,6 +78,8 @@ Compatibility-window alignment release, metadata and CI only — no runtime code
 ## [1.0.1] - 2026-09-05
 
 Hub-intake manifest release: `package.json#dshWorkshop` (`omdsh-workshop-package/v1`) declaring the profile-bundle integration, transactional install policy, lifecycle, structured permissions, tested compatibility set, and the `word_create` capability target. No code changes since 1.0.0.
+
+> **Not on npm:** the publish job failed on a missing `NPM_TOKEN` secret. The tag exists; the registry goes 1.0.0 → 1.0.2.
 
 ## [1.0.0] - 2026-09-04
 

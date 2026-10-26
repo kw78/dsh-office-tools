@@ -46,7 +46,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:e2e": "node tests/real-composition.mjs",
-    "check": "pnpm run typecheck && pnpm run types && pnpm run test && pnpm run build"
+    "sync:metadata": "node scripts/sync-metadata.mjs",
+    "check": "node scripts/sync-metadata.mjs --check && pnpm run typecheck && pnpm run types && pnpm run test && pnpm run build"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

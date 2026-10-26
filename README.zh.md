@@ -6,6 +6,8 @@
 
 为 DeepSeek Harness 提供 8 个模型可调用的 Office 文件工具：在会话工作区内创建、读取、更新 Word（`.docx`）、Excel（`.xlsx`）、PowerPoint（`.pptx`）。零运行时依赖 —— 文件由插件自带的 OOXML 引擎生成与解析，所有字节都经官方 `ctx.fs` 服务传输。
 
+**边界：** 这是文件生成器，不是编辑器。它创建文件并追加内容（`word_update` 只追加；没有 `ppt_update`），`word_create` 与每次 `word_update` 最多写入一张表；PPT 图片是**链接式**而非内嵌，因为工作区写入通道只支持文本。
+
 ## 工具
 
 | 工具 | 作用 |
@@ -74,7 +76,9 @@ pnpm install && pnpm run check   # typecheck + tests + build
 pnpm run test:e2e                # 真实组合 E2E（sandbox-policy + fs-sandbox + tools）
 ```
 
-兼容性：声明的 DSH 0.1.x 区间，以及 `^0.2.0-rc.1 || ^0.2.1-rc.3`；逐版本的实测记录见 `package.json`（`dsh.compatibility.dshReleases`）。CI 验证 0.1.2-rc.1、0.2.0-rc.1 和 0.2.1-rc.3，尚未声明支持 DSH 0.3.x。
+<!-- compatibility:start -->
+兼容性：`^0.1.0-rc.6 || ^0.1.1-rc.0 || ^0.1.2-alpha.0 || ^0.1.5-alpha.0 || ^0.2.0-rc.1 || ^0.2.1-rc.3`；逐版本的实测记录见 `package.json`（`dsh.compatibility.dshReleases`）。CI 验证 0.1.2-rc.1、0.2.0-rc.1、0.2.1-rc.3，尚未声明支持 DSH 0.3.x。
+<!-- compatibility:end -->
 
 生成文件最多 50 MiB；PPT 最多 200 页（包含可选封面）。图片仍为外部链接。分层架构与真实图片嵌入的迁移方案见 [架构分析](docs/ARCHITECTURE.zh.md)。
 

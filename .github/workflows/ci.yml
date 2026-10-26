@@ -42,13 +42,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # compatibility-matrix:start
         include:
-          # Pinned devDependency line — no reinstall needed.
           - dsh-version: '0.1.2-rc.1'
           - dsh-version: '0.2.0-rc.1'
-            cordis-version: '4.0.4'   # dsh-agent peer ~4.0.4
+            cordis-version: '4.0.4'
           - dsh-version: '0.2.1-rc.3'
-            cordis-version: '4.0.5'   # dsh-agent peer ~4.0.5
+            cordis-version: '4.0.5'
+        # compatibility-matrix:end
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
