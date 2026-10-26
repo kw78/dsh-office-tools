@@ -59,7 +59,7 @@ maintainer reference only.
   "kind": "extension",
   "tags": ["office", "word", "excel", "powerpoint", "tools"],
   "author": { "name": "kw78", "url": "https://github.com/kw78" },
-  "version": "0.6.0",
+  "version": "1.0.7",
   "license": "MIT",
   "source": {
     "repository": "https://github.com/kw78/dsh-office-tools",
@@ -77,7 +77,7 @@ maintainer reference only.
       "installScripts": "build-only",
       "runtimeDependencies": "docx/jszip/pptxgenjs (npm) + xlsx (SheetJS CDN 0.20.3 tarball URL)",
       "provenance": "npm --provenance via GitHub Actions OIDC (publish.yml)",
-      "ciMatrix": "node 20/22"
+      "ciMatrix": "node 20/22; DSH 0.1.2-rc.1, 0.2.0-rc.1, 0.2.1-rc.3"
     }
   },
   "listing": {
